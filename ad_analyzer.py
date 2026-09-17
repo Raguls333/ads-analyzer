@@ -218,10 +218,9 @@ def load_image_part(file_path: str) -> types.Part:
 FALLBACK_MODELS = [
     os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.0-flash-lite",
 ]
 
 
@@ -261,6 +260,7 @@ def _call_with_fallback(client: genai.Client, contents: list, config: types.Gene
             models_to_try.append(m)
 
     last_error = None
+    rate_limit_error = None
     import time
 
     for model_name in models_to_try:
@@ -281,6 +281,10 @@ def _call_with_fallback(client: genai.Client, contents: list, config: types.Gene
                 print(f"Project daily request quota exhausted on '{model_name}': {e}")
                 raise e
 
+            # Keep track of rate limit errors so they don't get obscured by subsequent 404s
+            if "429" in err_str or "quota" in err_str or "resource_exhausted" in err_str:
+                rate_limit_error = e
+
             # If 503 (temporary high demand surge), retry this model once after 2 seconds
             if "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
                 print(f"Temporary 503 high demand on '{model_name}'. Retrying once in 2s ...")
@@ -297,10 +301,13 @@ def _call_with_fallback(client: genai.Client, contents: list, config: types.Gene
                     print(f"Retry on '{model_name}' failed: {e2}. Hopping to next fallback model ...")
                     continue
 
-            # If 429 rate limit or capacity issue on this model:
-            # Immediately hop to next model family (e.g., gemini-2.0-flash or gemini-1.5-flash)
-            print(f"Rate limit / capacity issue on '{model_name}': {e}. Hopping to next model ...")
+            # If 404 or 429: immediately hop to next fallback model
+            print(f"Issue on '{model_name}': {e}. Hopping to next model ...")
             continue
+
+    # If any rate limit error was encountered, prefer raising it over downstream 404s
+    if rate_limit_error:
+        raise rate_limit_error
 
     # If all models failed, raise the last exception
     raise last_error

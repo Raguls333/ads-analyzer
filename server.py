@@ -302,6 +302,8 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                     "Free tier accounts have strict RPM/TPM limits (especially with video analysis). "
                     "Please wait 60 seconds and try again, or switch to a fresh API key."
                 )
+            elif "404" in err_str or "not_found" in err_lower or "no longer available" in err_lower:
+                user_msg = f"Model configuration notice: {err_str}"
             else:
                 user_msg = err_str
             self._send_json(500, {"error": user_msg, "details": err_str})
