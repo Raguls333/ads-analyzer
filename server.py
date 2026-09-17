@@ -259,7 +259,14 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 })
 
         except Exception as e:
-            self._send_json(500, {"error": str(e)})
+            err_str = str(e)
+            if "503" in err_str or "unavailable" in err_str.lower() or "high demand" in err_str.lower():
+                user_msg = "Google's Gemini API is currently experiencing a temporary demand surge (503 Unavailable). Automatic retries were attempted across Flash models. Please wait 30-60 seconds and try again."
+            elif "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
+                user_msg = "Gemini API free tier rate limit reached (429). Please wait a minute and try again."
+            else:
+                user_msg = err_str
+            self._send_json(500, {"error": user_msg})
 
 
 def main():

@@ -37,7 +37,7 @@ def _load_dotenv():
 
 _load_dotenv()
 
-MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 CSV_FILENAME = "ad_log.csv"
 
 CSV_HEADERS = [
@@ -160,8 +160,18 @@ def load_image_part(file_path: str) -> types.Part:
 
 
 # ---------------------------------------------------------------------------
-# Gemini API & Parsing
+# Gemini API & Parsing with Resilient Model Fallback
 # ---------------------------------------------------------------------------
+FALLBACK_MODELS = [
+    os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"),
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+]
+
+
 def extract_json(raw_text: str) -> dict:
     """Extract and parse JSON from model output, handling potential markdown fences."""
     text = raw_text.strip()
@@ -185,6 +195,48 @@ def extract_json(raw_text: str) -> dict:
         raise
 
 
+def _call_with_fallback(client: genai.Client, contents: list, config: types.GenerateContentConfig) -> tuple[str, str]:
+    """
+    Call Gemini with automatic retry and model fallback if a model returns 503 or 429.
+    Returns (raw_text, successful_model_name).
+    """
+    seen = set()
+    models_to_try = []
+    for m in FALLBACK_MODELS:
+        if m and m not in seen:
+            seen.add(m)
+            models_to_try.append(m)
+
+    last_error = None
+    import time
+
+    for model_name in models_to_try:
+        for attempt in range(2):
+            try:
+                print(f"Calling Gemini API with model '{model_name}' (attempt {attempt + 1}) ...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config,
+                )
+                return response.text or "", model_name
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                is_transient = any(k in err_str for k in ["503", "unavailable", "429", "high demand", "resource_exhausted", "quota"])
+                if is_transient:
+                    print(f"Transient capacity issue with '{model_name}': {e}. Waiting 2s before retry/fallback ...")
+                    time.sleep(2)
+                    continue
+                else:
+                    # Non-retryable on this model (e.g. model not found), switch to next model
+                    print(f"Error on model '{model_name}': {e}. Switching to alternative Flash model ...")
+                    break
+
+    # If all models failed, raise the last exception
+    raise last_error
+
+
 def analyze_ad(client: genai.Client, contents: list) -> tuple[dict | None, str]:
     """
     Call the Gemini API with the ad content and parse JSON response.
@@ -196,13 +248,7 @@ def analyze_ad(client: genai.Client, contents: list) -> tuple[dict | None, str]:
         response_mime_type="application/json",
     )
 
-    print(f"Analyzing ad with model '{MODEL_NAME}' ...")
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=contents,
-        config=config,
-    )
-    raw_text = response.text or ""
+    raw_text, used_model = _call_with_fallback(client, contents, config)
 
     # Attempt 1: Parse output
     try:
@@ -221,12 +267,7 @@ def analyze_ad(client: genai.Client, contents: list) -> tuple[dict | None, str]:
     retry_contents = list(contents) + [retry_prompt]
 
     try:
-        retry_response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=retry_contents,
-            config=config,
-        )
-        retry_text = retry_response.text or ""
+        retry_text, _ = _call_with_fallback(client, retry_contents, config)
         data = extract_json(retry_text)
         if isinstance(data, dict) and "observed" in data and "inference" in data:
             return data, retry_text
