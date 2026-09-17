@@ -23,7 +23,13 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAwareness, setSelectedAwareness] = useState('ALL');
-  const [apiHealth, setApiHealth] = useState({ status: 'checking', apiKeySet: false, model: 'gemini-3.8-flash' });
+  const [apiHealth, setApiHealth] = useState({ status: 'checking', apiKeySet: false, model: 'gemini-2.5-flash' });
+
+  // Custom user-provided Gemini API key (persisted in browser localStorage)
+  const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('gemini_custom_api_key') || '');
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [modalKeyInput, setModalKeyInput] = useState('');
+  const [quickKeyInput, setQuickKeyInput] = useState('');
 
   const fileInputRef = useRef(null);
   const API_BASE = import.meta.env.VITE_API_BASE || '';
@@ -42,7 +48,7 @@ export default function App() {
         setApiHealth(data);
       }
     } catch {
-      setApiHealth({ status: 'offline', apiKeySet: false, model: 'gemini-3.8-flash' });
+      setApiHealth({ status: 'offline', apiKeySet: false, model: 'gemini-2.5-flash' });
     }
   };
 
@@ -147,10 +153,25 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
-  // Run Analysis
-  const handleAnalyze = async () => {
+  // Save Custom Key Modal
+  const handleSaveCustomKey = (keyVal) => {
+    const trimmed = (keyVal || '').trim();
+    setCustomApiKey(trimmed);
+    if (trimmed) {
+      localStorage.setItem('gemini_custom_api_key', trimmed);
+    } else {
+      localStorage.removeItem('gemini_custom_api_key');
+    }
+    setShowKeyModal(false);
+    setErrorMsg('');
+  };
+
+  // Run Analysis (supports explicit key override for instant retry)
+  const handleAnalyze = async (overrideKey = null) => {
     setErrorMsg('');
     setCopySuccess('');
+
+    const effectiveKey = (overrideKey !== null ? overrideKey : customApiKey).trim();
 
     if (activeTab === 'video' && !videoUrl.trim() && !videoData) {
       setErrorMsg('Please paste an Instagram Reel or YouTube link, or upload a video file.');
@@ -189,10 +210,19 @@ export default function App() {
       setTimeout(() => setLoadingStage('Extracting strategy, hooks & psychological angles...'), 1200);
     }
 
+    if (effectiveKey) {
+      payload.apiKey = effectiveKey;
+    }
+
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) {
+        headers['X-Gemini-API-Key'] = effectiveKey;
+      }
+
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -218,6 +248,15 @@ export default function App() {
       setLoading(false);
       setLoadingStage('');
     }
+  };
+
+  const handleApplyQuickKeyAndRetry = () => {
+    const trimmed = quickKeyInput.trim();
+    if (!trimmed) return;
+    setCustomApiKey(trimmed);
+    localStorage.setItem('gemini_custom_api_key', trimmed);
+    setErrorMsg('');
+    handleAnalyze(trimmed);
   };
 
   // Copy Markdown
@@ -294,21 +333,42 @@ ${currentAnalysis.notes || 'N/A'}
             <span className="pulse-dot"></span>
             <span>{apiHealth.model}</span>
           </div>
-          <div className={`api-chip ${apiHealth.apiKeySet ? 'status-ok' : 'status-warn'}`}>
-            <span>{apiHealth.apiKeySet ? 'API Key Active' : 'API Key Missing'}</span>
+          <div className={`api-chip ${apiHealth.apiKeySet || customApiKey ? 'status-ok' : 'status-warn'}`}>
+            <span>{customApiKey ? 'Custom Key Active' : (apiHealth.apiKeySet ? 'Server Key Active' : 'API Key Missing')}</span>
           </div>
+          <button
+            type="button"
+            className="key-settings-btn"
+            title="API Key Settings & Quota"
+            onClick={() => {
+              setModalKeyInput(customApiKey);
+              setShowKeyModal(true);
+            }}
+          >
+            ⚙️ Key
+          </button>
         </div>
       </header>
 
       {/* Main Content Layout */}
       <main className="app-main">
-        {/* Warning if API key is not set */}
-        {!apiHealth.apiKeySet && (
+        {/* Warning if API key is not set anywhere */}
+        {!apiHealth.apiKeySet && !customApiKey && (
           <div className="key-alert-banner">
             <span className="alert-icon">⚠️</span>
             <div>
-              <strong>Gemini API Key Required:</strong> Set your <code>GEMINI_API_KEY</code> environment variable in PowerShell (<code>$env:GEMINI_API_KEY="your-key"</code>) and restart the server, or get a free key at{' '}
-              <a href="https://aistudio.google.com" target="_blank" rel="noreferrer">aistudio.google.com</a>.
+              <strong>Gemini API Key Required:</strong> Set your <code>GEMINI_API_KEY</code> on the server, or{' '}
+              <button
+                type="button"
+                className="banner-link-btn"
+                onClick={() => {
+                  setModalKeyInput('');
+                  setShowKeyModal(true);
+                }}
+              >
+                enter your free API key here
+              </button>{' '}
+              from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>.
             </div>
           </div>
         )}
@@ -489,8 +549,85 @@ ${currentAnalysis.notes || 'N/A'}
               </div>
             )}
 
-            {/* Error Message */}
-            {errorMsg && <div className="error-toast">{errorMsg}</div>}
+            {/* Error Message or Quota Guide */}
+            {errorMsg && (
+              (errorMsg.toLowerCase().includes('429') ||
+               errorMsg.toLowerCase().includes('rate limit') ||
+               errorMsg.toLowerCase().includes('quota') ||
+               errorMsg.toLowerCase().includes('resource_exhausted') ||
+               errorMsg.toLowerCase().includes('per day')) ? (
+                <div className="quota-card">
+                  <div className="quota-header">
+                    <span className="quota-icon">⚡</span>
+                    <div>
+                      <h4 className="quota-title">Gemini Free Tier Quota / Rate Limit (429)</h4>
+                      <p className="quota-desc">{errorMsg}</p>
+                    </div>
+                  </div>
+
+                  <div className="quota-body">
+                    <div className="quota-tips">
+                      <div className="quota-tip-item">
+                        <span className="tip-bullet">1</span>
+                        <div>
+                          <strong>Per-Minute Limit (RPM/TPM):</strong> Video analysis uses ~250 tokens/sec. Wait ~60 seconds and retry.
+                        </div>
+                      </div>
+                      <div className="quota-tip-item">
+                        <span className="tip-bullet">2</span>
+                        <div>
+                          <strong>Daily Project Quota (RPD):</strong> If today's project quota is fully exhausted, quotas reset at midnight Pacific Time.
+                        </div>
+                      </div>
+                      <div className="quota-tip-item">
+                        <span className="tip-bullet">3</span>
+                        <div>
+                          <strong>Instant 100% Free Fix:</strong> Create a new project in <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio ↗</a> to get a fresh daily free quota, and paste it below:
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="quota-quick-input-group">
+                      <input
+                        type="password"
+                        className="quota-key-field"
+                        placeholder="Paste new Gemini API Key (AIzaSy...)"
+                        value={quickKeyInput}
+                        onChange={(e) => setQuickKeyInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleApplyQuickKeyAndRetry()}
+                      />
+                      <button
+                        type="button"
+                        className="btn-apply-key"
+                        onClick={handleApplyQuickKeyAndRetry}
+                        disabled={!quickKeyInput.trim() || loading}
+                      >
+                        ⚡ Save Key & Retry
+                      </button>
+                    </div>
+
+                    {customApiKey && (
+                      <div className="quota-footer-action">
+                        <span>Using custom key ({customApiKey.slice(0, 6)}...{customApiKey.slice(-4)})</span>
+                        <button
+                          type="button"
+                          className="btn-link-revert"
+                          onClick={() => {
+                            setCustomApiKey('');
+                            localStorage.removeItem('gemini_custom_api_key');
+                            setErrorMsg('');
+                          }}
+                        >
+                          Revert to Server Key
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="error-toast">{errorMsg}</div>
+              )
+            )}
 
             {/* Submit Action */}
             <button
@@ -780,8 +917,85 @@ ${currentAnalysis.notes || 'N/A'}
 
       {/* Footer */}
       <footer className="app-footer">
-        <p>Ad Analyzer • Powered by Gemini 3.8 Flash • Local Swipe File</p>
+        <p>Ad Analyzer • Powered by Gemini Flash Multimodal • Local Swipe File</p>
       </footer>
+
+      {/* API Key Settings Modal */}
+      {showKeyModal && (
+        <div className="modal-backdrop" onClick={() => setShowKeyModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>⚙️ Gemini API Key Settings</h3>
+              <button type="button" className="close-btn" onClick={() => setShowKeyModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-desc">
+                Provide your personal Gemini API key to override the server's default key. Your key is stored securely in your browser's local storage and passed directly for requests.
+              </p>
+
+              <div className="key-status-row">
+                <span className="status-label">Active Source:</span>
+                <span className="status-badge">
+                  {customApiKey ? 'Custom Browser Key' : (apiHealth.apiKeySet ? 'Server Environment Key' : 'None')}
+                </span>
+              </div>
+
+              <div className="form-group">
+                <label className="input-label" htmlFor="modalApiKeyInput">Gemini API Key</label>
+                <input
+                  id="modalApiKeyInput"
+                  type="password"
+                  className="url-field modal-field"
+                  placeholder="AIzaSy..."
+                  value={modalKeyInput}
+                  onChange={(e) => setModalKeyInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveCustomKey(modalKeyInput)}
+                />
+              </div>
+
+              <div className="modal-tips">
+                <p>
+                  💡 <strong>Need a fresh key or hit rate limits?</strong> Visit{' '}
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">
+                    Google AI Studio ↗
+                  </a>{' '}
+                  and create an API key under a <em>new project</em> for a fresh daily free quota.
+                </p>
+              </div>
+
+              <div className="modal-actions">
+                {customApiKey && (
+                  <button
+                    type="button"
+                    className="btn-danger-outline"
+                    onClick={() => {
+                      handleSaveCustomKey('');
+                      setModalKeyInput('');
+                    }}
+                  >
+                    Clear & Use Server Key
+                  </button>
+                )}
+                <div style={{ flex: 1 }}></div>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowKeyModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => handleSaveCustomKey(modalKeyInput)}
+                >
+                  Save API Key
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

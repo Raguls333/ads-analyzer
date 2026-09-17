@@ -65,7 +65,7 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Gemini-API-Key")
         self.end_headers()
 
     def do_GET(self):
@@ -132,19 +132,21 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             self._send_json(404, {"error": "Not found"})
             return
 
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            self._send_json(400, {
-                "error": "GEMINI_API_KEY environment variable is not set. Please set it before analyzing."
-            })
-            return
-
         content_length = int(self.headers.get("Content-Length", 0))
         post_body = self.rfile.read(content_length)
         try:
             payload = json.loads(post_body.decode("utf-8"))
         except Exception as e:
             self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+            return
+
+        # Check for custom API key passed from UI header or body; fall back to server env
+        custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+        api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            self._send_json(400, {
+                "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+            })
             return
 
         input_type = payload.get("type", "url")
@@ -285,13 +287,24 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
         except Exception as e:
             err_str = str(e)
-            if "503" in err_str or "unavailable" in err_str.lower() or "high demand" in err_str.lower():
-                user_msg = "Google's Gemini API is currently experiencing a temporary demand surge (503 Unavailable). Automatic retries were attempted across Flash models. Please wait 30-60 seconds and try again."
-            elif "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
-                user_msg = "Gemini API free tier rate limit reached (429). Please wait a minute and try again."
+            err_lower = err_str.lower()
+            if "503" in err_str or "unavailable" in err_lower or "high demand" in err_lower:
+                user_msg = "Google Gemini API is currently experiencing a temporary demand surge (503 Unavailable). Automatic retries were attempted across Flash models. Please wait 30-60 seconds and try again."
+            elif any(k in err_lower for k in ["per day", "daily", "requests per day"]):
+                user_msg = (
+                    "Gemini API Free Tier daily quota reached (RPD limit reached for today). "
+                    "Google AI Studio resets daily quotas at midnight Pacific Time (PT). "
+                    "To continue analyzing immediately, create a new API key under a fresh Google Cloud project in AI Studio or link a billing account for Pay-As-You-Go."
+                )
+            elif "429" in err_str or "quota" in err_lower or "rate" in err_lower or "resource_exhausted" in err_lower:
+                user_msg = (
+                    f"Gemini API rate limit reached (429). {err_str} "
+                    "Free tier accounts have strict RPM/TPM limits (especially with video analysis). "
+                    "Please wait 60 seconds and try again, or switch to a fresh API key."
+                )
             else:
                 user_msg = err_str
-            self._send_json(500, {"error": user_msg})
+            self._send_json(500, {"error": user_msg, "details": err_str})
         finally:
             if temp_video_cleanup and os.path.isfile(temp_video_cleanup):
                 try:

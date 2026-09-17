@@ -220,8 +220,8 @@ FALLBACK_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash-lite",
 ]
 
 
@@ -250,7 +250,7 @@ def extract_json(raw_text: str) -> dict:
 
 def _call_with_fallback(client: genai.Client, contents: list, config: types.GenerateContentConfig) -> tuple[str, str]:
     """
-    Call Gemini with automatic retry and model fallback if a model returns 503 or 429.
+    Call Gemini with automatic model fallback and intelligent quota handling.
     Returns (raw_text, successful_model_name).
     """
     seen = set()
@@ -264,27 +264,43 @@ def _call_with_fallback(client: genai.Client, contents: list, config: types.Gene
     import time
 
     for model_name in models_to_try:
-        for attempt in range(2):
-            try:
-                print(f"Calling Gemini API with model '{model_name}' (attempt {attempt + 1}) ...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=contents,
-                    config=config,
-                )
-                return response.text or "", model_name
-            except Exception as e:
-                last_error = e
-                err_str = str(e).lower()
-                is_transient = any(k in err_str for k in ["503", "unavailable", "429", "high demand", "resource_exhausted", "quota"])
-                if is_transient:
-                    print(f"Transient capacity issue with '{model_name}': {e}. Waiting 2s before retry/fallback ...")
-                    time.sleep(2)
+        try:
+            print(f"Calling Gemini API with model '{model_name}' ...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=config,
+            )
+            return response.text or "", model_name
+        except Exception as e:
+            last_error = e
+            err_str = str(e).lower()
+
+            # If project daily quota is exhausted, no model under this project will succeed today
+            if any(k in err_str for k in ["per day", "daily", "rpd", "requests per day"]):
+                print(f"Project daily request quota exhausted on '{model_name}': {e}")
+                raise e
+
+            # If 503 (temporary high demand surge), retry this model once after 2 seconds
+            if "503" in err_str or "unavailable" in err_str or "high demand" in err_str:
+                print(f"Temporary 503 high demand on '{model_name}'. Retrying once in 2s ...")
+                time.sleep(2)
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=contents,
+                        config=config,
+                    )
+                    return response.text or "", model_name
+                except Exception as e2:
+                    last_error = e2
+                    print(f"Retry on '{model_name}' failed: {e2}. Hopping to next fallback model ...")
                     continue
-                else:
-                    # Non-retryable on this model (e.g. model not found), switch to next model
-                    print(f"Error on model '{model_name}': {e}. Switching to alternative Flash model ...")
-                    break
+
+            # If 429 rate limit or capacity issue on this model:
+            # Immediately hop to next model family (e.g., gemini-2.0-flash or gemini-1.5-flash)
+            print(f"Rate limit / capacity issue on '{model_name}': {e}. Hopping to next model ...")
+            continue
 
     # If all models failed, raise the last exception
     raise last_error
