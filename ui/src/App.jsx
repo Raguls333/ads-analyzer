@@ -1,7 +1,295 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 
+// ---------------------------------------------------------------------------
+// 6-Digit Passcode Protection Screen
+// ---------------------------------------------------------------------------
+function PasscodeGate({ onUnlock }) {
+  const [pinDigits, setPinDigits] = useState(['', '', '', '', '', '']);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [shake, setShake] = useState(false);
+  const [showChangePin, setShowChangePin] = useState(false);
+  const [currentPinInput, setCurrentPinInput] = useState('');
+  const [newPinInput, setNewPinInput] = useState('');
+  const [pinChangeNotice, setPinChangeNotice] = useState('');
+  const inputRefs = useRef([]);
+
+  const getStoredPin = () => {
+    return localStorage.getItem('ad_analyzer_pin') || import.meta.env.VITE_APP_PIN || '123456';
+  };
+
+  const verifyCode = (code) => {
+    const validPin = getStoredPin();
+    if (code === validPin) {
+      sessionStorage.setItem('ad_analyzer_auth', 'true');
+      onUnlock();
+    } else {
+      setErrorMsg('Incorrect 6-digit code. Please try again.');
+      setShake(true);
+      setTimeout(() => setShake(false), 500);
+      setPinDigits(['', '', '', '', '', '']);
+      setTimeout(() => {
+        if (inputRefs.current[0]) inputRefs.current[0].focus();
+      }, 50);
+    }
+  };
+
+  const handleDigitChange = (index, value) => {
+    const char = value.slice(-1);
+    if (char && !/^\d$/.test(char)) return;
+
+    const newDigits = [...pinDigits];
+    newDigits[index] = char;
+    setPinDigits(newDigits);
+    setErrorMsg('');
+
+    if (char && index < 5 && inputRefs.current[index + 1]) {
+      inputRefs.current[index + 1].focus();
+    }
+
+    const completeCode = newDigits.join('');
+    if (completeCode.length === 6 && !newDigits.includes('')) {
+      verifyCode(completeCode);
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === 'Backspace') {
+      if (!pinDigits[index] && index > 0 && inputRefs.current[index - 1]) {
+        inputRefs.current[index - 1].focus();
+      }
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').trim().replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+
+    const newDigits = ['', '', '', '', '', ''];
+    for (let i = 0; i < pasted.length; i++) {
+      newDigits[i] = pasted[i];
+    }
+    setPinDigits(newDigits);
+
+    if (pasted.length === 6) {
+      verifyCode(pasted);
+    } else if (inputRefs.current[pasted.length]) {
+      inputRefs.current[pasted.length].focus();
+    }
+  };
+
+  const handleKeypadPress = (val) => {
+    if (val === 'clear') {
+      setPinDigits(['', '', '', '', '', '']);
+      setErrorMsg('');
+      if (inputRefs.current[0]) inputRefs.current[0].focus();
+      return;
+    }
+    if (val === 'delete') {
+      const lastIndex = pinDigits.map(d => Boolean(d)).lastIndexOf(true);
+      if (lastIndex >= 0) {
+        const newDigits = [...pinDigits];
+        newDigits[lastIndex] = '';
+        setPinDigits(newDigits);
+        if (inputRefs.current[lastIndex]) inputRefs.current[lastIndex].focus();
+      }
+      return;
+    }
+
+    const firstEmptyIndex = pinDigits.findIndex(d => !d);
+    if (firstEmptyIndex !== -1) {
+      const newDigits = [...pinDigits];
+      newDigits[firstEmptyIndex] = val;
+      setPinDigits(newDigits);
+
+      if (firstEmptyIndex < 5 && inputRefs.current[firstEmptyIndex + 1]) {
+        inputRefs.current[firstEmptyIndex + 1].focus();
+      }
+
+      if (firstEmptyIndex === 5) {
+        verifyCode(newDigits.join(''));
+      }
+    }
+  };
+
+  const handleChangePinSubmit = (e) => {
+    e.preventDefault();
+    const currentValid = getStoredPin();
+    if (currentPinInput.trim() !== currentValid) {
+      setPinChangeNotice('Current code does not match.');
+      return;
+    }
+    if (!/^\d{6}$/.test(newPinInput.trim())) {
+      setPinChangeNotice('New code must be exactly 6 numeric digits.');
+      return;
+    }
+    localStorage.setItem('ad_analyzer_pin', newPinInput.trim());
+    setPinChangeNotice('Access code updated successfully!');
+    setTimeout(() => {
+      setShowChangePin(false);
+      setPinChangeNotice('');
+      setCurrentPinInput('');
+      setNewPinInput('');
+    }, 1200);
+  };
+
+  return (
+    <div className="pin-gate-screen">
+      <div className={`pin-card ${shake ? 'pin-shake' : ''}`}>
+        <div className="pin-header">
+          <div className="logo-badge pin-logo">
+            <span className="logo-spark">✨</span>
+          </div>
+          <h2 className="pin-title">Ad Analyzer</h2>
+          <p className="pin-subtitle">Enter your 6-digit access code</p>
+        </div>
+
+        {/* 6 Digit Input Row */}
+        <div className="pin-inputs-row" onPaste={handlePaste}>
+          {pinDigits.map((digit, i) => (
+            <input
+              key={i}
+              ref={(el) => (inputRefs.current[i] = el)}
+              type="password"
+              inputMode="numeric"
+              maxLength={1}
+              autoComplete="off"
+              className={`pin-box ${digit ? 'filled' : ''}`}
+              value={digit}
+              onChange={(e) => handleDigitChange(i, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(i, e)}
+              autoFocus={i === 0}
+            />
+          ))}
+        </div>
+
+        {errorMsg && <div className="pin-error-toast">{errorMsg}</div>}
+
+        {/* Mobile/Touch Keypad */}
+        <div className="pin-keypad">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+            <button
+              key={num}
+              type="button"
+              className="pin-key"
+              onClick={() => handleKeypadPress(String(num))}
+            >
+              {num}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="pin-key pin-key-fn"
+            onClick={() => handleKeypadPress('clear')}
+            title="Clear"
+          >
+            C
+          </button>
+          <button
+            type="button"
+            className="pin-key"
+            onClick={() => handleKeypadPress('0')}
+          >
+            0
+          </button>
+          <button
+            type="button"
+            className="pin-key pin-key-fn"
+            onClick={() => handleKeypadPress('delete')}
+            title="Backspace"
+          >
+            ⌫
+          </button>
+        </div>
+
+        {/* Footer info & Change Code */}
+        <div className="pin-footer-links">
+          <button
+            type="button"
+            className="pin-change-btn"
+            onClick={() => setShowChangePin(true)}
+          >
+            ⚙️ Change 6-Digit Code
+          </button>
+          <span className="pin-default-hint">Default code: <code>123456</code></span>
+        </div>
+
+        {/* Change Pin Modal */}
+        {showChangePin && (
+          <div className="modal-backdrop" onClick={() => setShowChangePin(false)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>⚙️ Change Access Code</h3>
+                <button type="button" className="close-btn" onClick={() => setShowChangePin(false)}>✕</button>
+              </div>
+              <form onSubmit={handleChangePinSubmit} className="modal-body">
+                <p className="modal-desc">
+                  Set a custom 6-digit numeric PIN to protect your Ad Analyzer workspace.
+                </p>
+
+                <div className="form-group">
+                  <label className="input-label" htmlFor="currentPin">Current 6-Digit Code</label>
+                  <input
+                    id="currentPin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="url-field modal-field"
+                    placeholder="Enter current code (e.g. 123456)"
+                    value={currentPinInput}
+                    onChange={(e) => setCurrentPinInput(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="input-label" htmlFor="newPin">New 6-Digit Code</label>
+                  <input
+                    id="newPin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="url-field modal-field"
+                    placeholder="Enter new 6 digits (e.g. 849201)"
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {pinChangeNotice && (
+                  <div className={pinChangeNotice.includes('successfully') ? 'copy-notice' : 'error-toast'}>
+                    {pinChangeNotice}
+                  </div>
+                )}
+
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowChangePin(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary">
+                    Update Code
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return sessionStorage.getItem('ad_analyzer_auth') === 'true';
+  });
+
   const [activeTab, setActiveTab] = useState('video'); // 'video' | 'image' | 'url'
   const [imageData, setImageData] = useState(null); // base64 data url
   const [imageMime, setImageMime] = useState('image/png');
@@ -398,6 +686,11 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
     return matchSearch && matchAwareness;
   });
 
+  // 6-Digit Passcode Protection Check
+  if (!isAuthenticated) {
+    return <PasscodeGate onUnlock={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="app-container">
       {/* Navigation Header */}
@@ -430,6 +723,17 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
             }}
           >
             ⚙️ Key
+          </button>
+          <button
+            type="button"
+            className="btn-lock-header"
+            title="Lock Application"
+            onClick={() => {
+              sessionStorage.removeItem('ad_analyzer_auth');
+              setIsAuthenticated(false);
+            }}
+          >
+            🔒 Lock
           </button>
         </div>
       </header>
