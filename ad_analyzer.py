@@ -92,12 +92,65 @@ Rules:
 
 
 # ---------------------------------------------------------------------------
-# Input Preparation
+# Input Preparation & Video Extraction
 # ---------------------------------------------------------------------------
 def is_url(target: str) -> bool:
     """Return True if target starts with http:// or https://."""
     lower = target.lower()
     return lower.startswith("http://") or lower.startswith("https://")
+
+
+def is_video_url(target: str) -> bool:
+    """Return True if target is a YouTube, Instagram, TikTok, or direct video URL."""
+    if not is_url(target):
+        return False
+    lower = target.lower()
+    video_indicators = [
+        "youtube.com", "youtu.be",
+        "instagram.com/reel", "instagram.com/p", "instagram.com/tv", "instagram.com/share", "instagr.am",
+        "tiktok.com",
+        ".mp4", ".mov", ".webm"
+    ]
+    return any(indicator in lower for indicator in video_indicators)
+
+
+def is_video_file(target: str) -> bool:
+    """Return True if target is a local video file."""
+    ext = os.path.splitext(target)[1].lower()
+    return ext in [".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"]
+
+
+def download_video_clip(url: str, output_dir: str = None) -> str:
+    """Download a video ad using yt-dlp, returning the path to the downloaded MP4."""
+    import tempfile
+    import yt_dlp
+
+    if not output_dir:
+        output_dir = tempfile.mkdtemp(prefix="ad_video_")
+
+    out_template = os.path.join(output_dir, "%(id)s.%(ext)s")
+    ydl_opts = {
+        "format": "best[ext=mp4]/best",
+        "outtmpl": out_template,
+        "quiet": True,
+        "no_warnings": True,
+        "max_filesize": 50 * 1024 * 1024,  # 50MB max
+    }
+
+    print(f"Downloading video from {url} ...")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+
+        base, _ = os.path.splitext(filename)
+        for ext in [".mp4", ".webm", ".mkv", ".mov"]:
+            candidate = base + ext
+            if os.path.isfile(candidate):
+                return candidate
+        if os.path.isfile(filename):
+            return filename
+
+        raise FileNotFoundError(f"Downloaded video file not found for {url}")
 
 
 def fetch_url_text(url: str) -> str:
@@ -277,6 +330,44 @@ def analyze_ad(client: genai.Client, contents: list) -> tuple[dict | None, str]:
         return None, raw_text
 
 
+def analyze_video_ad(client: genai.Client, video_path: str) -> tuple[dict | None, str]:
+    """Upload a video file to Gemini Files API and analyze its strategy."""
+    import time
+    if not os.path.isfile(video_path):
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+
+    print(f"Uploading video {video_path} to Gemini Files API ...")
+    uploaded_file = client.files.upload(file=video_path)
+
+    print(f"Processing video with Gemini (file: {uploaded_file.name}) ...")
+    while uploaded_file.state.name == "PROCESSING":
+        time.sleep(2)
+        uploaded_file = client.files.get(name=uploaded_file.name)
+
+    if uploaded_file.state.name == "FAILED":
+        raise ValueError(f"Gemini video processing failed: {uploaded_file.error}")
+
+    prompt = (
+        "You are an expert video advertising strategist. Analyze this video ad comprehensively.\n"
+        "Pay special attention to:\n"
+        "1. The 0-3 second hook (visual pattern interrupt + opening verbal/text hook).\n"
+        "2. The creative format (e.g. UGC, talking head, product demo, split screen, b-roll montage).\n"
+        "3. The offer, proof elements, and call to action.\n"
+        "4. Inferred target audience, positioning, psychological angle, and buyer awareness level.\n\n"
+        "Strictly adhere to the JSON schema and rules provided in the system instructions."
+    )
+
+    contents = [prompt, uploaded_file]
+    try:
+        data, raw_text = analyze_ad(client, contents)
+        return data, raw_text
+    finally:
+        try:
+            client.files.delete(name=uploaded_file.name)
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Logging & Display
 # ---------------------------------------------------------------------------
@@ -337,9 +428,11 @@ def print_breakdown(data: dict, source: str, timestamp: str) -> None:
 # ---------------------------------------------------------------------------
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python ad_analyzer.py <image_path_or_url>")
+        print("Usage: python ad_analyzer.py <image_path_or_video_url_or_landing_page>")
         print("\nExamples:")
         print("  python ad_analyzer.py screenshot.png")
+        print("  python ad_analyzer.py https://www.instagram.com/reel/C2.../")
+        print("  python ad_analyzer.py https://www.youtube.com/shorts/...")
         print("  python ad_analyzer.py https://example.com/landing-page")
         sys.exit(1)
 
@@ -358,33 +451,40 @@ def main():
 
     # Initialize Gemini client
     client = genai.Client(api_key=api_key)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Prepare input contents
-    contents = []
-    if is_url(target_input):
-        try:
+    data = None
+    raw_response = ""
+    temp_video_cleanup = None
+
+    try:
+        if is_video_url(target_input):
+            print(f"Detected video ad URL: {target_input}")
+            temp_video_cleanup = download_video_clip(target_input)
+            data, raw_response = analyze_video_ad(client, temp_video_cleanup)
+        elif is_video_file(target_input):
+            print(f"Detected local video file: {target_input}")
+            data, raw_response = analyze_video_ad(client, target_input)
+        elif is_url(target_input):
             page_text = fetch_url_text(target_input)
             prompt = (
                 f"Analyze the following landing page text according to the system instructions:\n\n"
                 f"--- BEGIN LANDING PAGE TEXT ---\n{page_text}\n--- END LANDING PAGE TEXT ---"
             )
-            contents.append(prompt)
-        except Exception as e:
-            print(f"[Error] Failed to fetch URL '{target_input}': {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        try:
+            data, raw_response = analyze_ad(client, [prompt])
+        else:
             image_part = load_image_part(target_input)
             prompt = "Analyze this advertisement image according to the system instructions."
-            contents = [prompt, image_part]
-        except Exception as e:
-            print(f"[Error] Failed to load image '{target_input}': {e}", file=sys.stderr)
-            sys.exit(1)
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Call Gemini and parse
-    data, raw_response = analyze_ad(client, contents)
+            data, raw_response = analyze_ad(client, [prompt, image_part])
+    except Exception as e:
+        print(f"[Error] Failed analyzing target '{target_input}': {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        if temp_video_cleanup and os.path.isfile(temp_video_cleanup):
+            try:
+                os.remove(temp_video_cleanup)
+            except Exception:
+                pass
 
     if data:
         # Successful parse

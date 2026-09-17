@@ -2,11 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('image'); // 'image' | 'url'
+  const [activeTab, setActiveTab] = useState('video'); // 'video' | 'image' | 'url'
   const [imageData, setImageData] = useState(null); // base64 data url
   const [imageMime, setImageMime] = useState('image/png');
   const [imageFileName, setImageFileName] = useState('');
   const [urlInput, setUrlInput] = useState('');
+
+  // Video state
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoData, setVideoData] = useState(null);
+  const [videoFileName, setVideoFileName] = useState('');
+  const videoInputRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState('');
@@ -115,11 +121,41 @@ export default function App() {
     e.preventDefault();
   };
 
+  const handleVideoFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processVideoFile(file);
+    }
+  };
+
+  const processVideoFile = (file) => {
+    if (!file.type.startsWith('video/')) {
+      setErrorMsg('Please select a valid video file (.mp4, .mov, .webm).');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setErrorMsg('Video file must be under 50MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setVideoData(event.target.result);
+      setVideoFileName(file.name);
+      setVideoUrl('');
+      setErrorMsg('');
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Run Analysis
   const handleAnalyze = async () => {
     setErrorMsg('');
     setCopySuccess('');
 
+    if (activeTab === 'video' && !videoUrl.trim() && !videoData) {
+      setErrorMsg('Please paste an Instagram Reel or YouTube link, or upload a video file.');
+      return;
+    }
     if (activeTab === 'image' && !imageData) {
       setErrorMsg('Please drop an image, paste a screenshot with Ctrl+V, or upload a file.');
       return;
@@ -130,15 +166,30 @@ export default function App() {
     }
 
     setLoading(true);
-    setLoadingStage('Connecting to Gemini 3.8 Flash...');
+
+    let payload;
+    if (activeTab === 'video') {
+      if (videoUrl.trim()) {
+        payload = { type: 'video_url', url: videoUrl.trim() };
+        setLoadingStage('Downloading clip from Instagram / YouTube...');
+        setTimeout(() => setLoadingStage('Uploading video to Gemini Vision engine...'), 2500);
+        setTimeout(() => setLoadingStage('Analyzing 0-3s hook, pacing, audio & strategy...'), 6000);
+      } else {
+        payload = { type: 'video_file', data: videoData, filename: videoFileName };
+        setLoadingStage('Uploading video to Gemini Vision engine...');
+        setTimeout(() => setLoadingStage('Analyzing 0-3s hook, pacing, audio & strategy...'), 3500);
+      }
+    } else if (activeTab === 'image') {
+      payload = { type: 'image', data: imageData, mimeType: imageMime, filename: imageFileName };
+      setLoadingStage('Analyzing image ad with Gemini Multimodal engine...');
+      setTimeout(() => setLoadingStage('Extracting strategy, hooks & psychological angles...'), 1200);
+    } else {
+      payload = { type: 'url', url: urlInput.trim() };
+      setLoadingStage('Fetching landing page and analyzing copy...');
+      setTimeout(() => setLoadingStage('Extracting strategy, hooks & psychological angles...'), 1200);
+    }
 
     try {
-      const payload = activeTab === 'image'
-        ? { type: 'image', data: imageData, mimeType: imageMime, filename: imageFileName }
-        : { type: 'url', url: urlInput.trim() };
-
-      setTimeout(() => setLoadingStage('Extracting strategy, hooks & psychological angles...'), 1200);
-
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,6 +206,7 @@ export default function App() {
         ...result.data,
         source: result.source,
         timestamp: result.timestamp,
+        isVideo: activeTab === 'video',
         previewImage: activeTab === 'image' ? imageData : null,
       });
 
@@ -268,6 +320,13 @@ ${currentAnalysis.notes || 'N/A'}
             <div className="tab-bar">
               <button
                 type="button"
+                className={`tab-btn ${activeTab === 'video' ? 'active' : ''}`}
+                onClick={() => setActiveTab('video')}
+              >
+                🎬 Video Ad <span className="kbd-hint">IG / YouTube</span>
+              </button>
+              <button
+                type="button"
                 className={`tab-btn ${activeTab === 'image' ? 'active' : ''}`}
                 onClick={() => setActiveTab('image')}
               >
@@ -278,9 +337,87 @@ ${currentAnalysis.notes || 'N/A'}
                 className={`tab-btn ${activeTab === 'url' ? 'active' : ''}`}
                 onClick={() => setActiveTab('url')}
               >
-                🌐 Landing Page URL
+                🌐 Landing Page
               </button>
             </div>
+
+            {/* Video Tab */}
+            {activeTab === 'video' && (
+              <div className="video-input-container">
+                <label htmlFor="videoUrlInput" className="input-label">
+                  Instagram Reel / Post or YouTube Short / Video URL
+                </label>
+                <div className="url-input-wrapper">
+                  <span className="url-icon">🎥</span>
+                  <input
+                    id="videoUrlInput"
+                    type="url"
+                    className="url-field"
+                    placeholder="https://www.instagram.com/reel/... or https://youtube.com/shorts/..."
+                    value={videoUrl}
+                    onChange={(e) => {
+                      setVideoUrl(e.target.value);
+                      if (e.target.value) {
+                        setVideoData(null);
+                        setVideoFileName('');
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
+                  />
+                  {videoUrl && (
+                    <button type="button" className="clear-btn" onClick={() => setVideoUrl('')}>✕</button>
+                  )}
+                </div>
+
+                <div className="platform-badges">
+                  <span className="platform-tag">Instagram Reels</span>
+                  <span className="platform-tag">YouTube Shorts</span>
+                  <span className="platform-tag">TikTok</span>
+                </div>
+
+                <div className="video-or-divider">
+                  <span>OR UPLOAD VIDEO FILE (.MP4, .MOV, .WEBM)</span>
+                </div>
+
+                <div
+                  className={`video-file-dropzone ${videoData ? 'has-file' : ''}`}
+                  onClick={() => !videoData && videoInputRef.current?.click()}
+                >
+                  <input
+                    type="file"
+                    ref={videoInputRef}
+                    accept="video/mp4,video/quicktime,video/webm"
+                    onChange={handleVideoFileChange}
+                    style={{ display: 'none' }}
+                  />
+                  {videoData ? (
+                    <div className="video-uploaded-row">
+                      <span className="video-icon-sm">🎞️</span>
+                      <span className="video-name">{videoFileName}</span>
+                      <button
+                        type="button"
+                        className="btn-remove-video"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVideoData(null);
+                          setVideoFileName('');
+                        }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="video-drop-prompt">
+                      <span>📁 Drag or click to upload local video file</span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="helper-text">
+                  Automatically extracts spoken audio, on-screen text, pacing, visual format & the 0-3s hook.
+                </p>
+              </div>
+            )}
 
             {/* Image Tab */}
             {activeTab === 'image' && (

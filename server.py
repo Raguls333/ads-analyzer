@@ -152,10 +152,38 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
         try:
             client = genai.Client(api_key=api_key)
-            contents = []
-            source_display = ""
+            temp_video_cleanup = None
 
-            if input_type == "url":
+            if input_type == "video_url":
+                url = payload.get("url", "").strip()
+                if not url:
+                    self._send_json(400, {"error": "Video URL cannot be empty."})
+                    return
+                source_display = url
+                temp_video_cleanup = ad_analyzer.download_video_clip(url)
+                data, raw_response = ad_analyzer.analyze_video_ad(client, temp_video_cleanup)
+
+            elif input_type == "video_file":
+                raw_data = payload.get("data", "")
+                filename = payload.get("filename", "Uploaded Video")
+                source_display = filename
+
+                if not raw_data:
+                    self._send_json(400, {"error": "Video data cannot be empty."})
+                    return
+
+                if "," in raw_data:
+                    raw_data = raw_data.split(",", 1)[1]
+
+                import tempfile
+                temp_fd, temp_video_cleanup = tempfile.mkstemp(suffix=".mp4", prefix="ad_upload_")
+                os.close(temp_fd)
+                with open(temp_video_cleanup, "wb") as f:
+                    f.write(base64.b64decode(raw_data))
+
+                data, raw_response = ad_analyzer.analyze_video_ad(client, temp_video_cleanup)
+
+            elif input_type == "url":
                 url = payload.get("url", "").strip()
                 if not url:
                     self._send_json(400, {"error": "URL cannot be empty."})
@@ -166,7 +194,7 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                     f"Analyze the following landing page text according to the system instructions:\n\n"
                     f"--- BEGIN LANDING PAGE TEXT ---\n{page_text}\n--- END LANDING PAGE TEXT ---"
                 )
-                contents.append(prompt)
+                data, raw_response = ad_analyzer.analyze_ad(client, [prompt])
 
             elif input_type == "image":
                 raw_data = payload.get("data", "")
@@ -191,13 +219,10 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 image_bytes = base64.b64decode(base64_str)
                 part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
                 prompt = "Analyze this advertisement image according to the system instructions."
-                contents = [prompt, part]
+                data, raw_response = ad_analyzer.analyze_ad(client, [prompt, part])
             else:
                 self._send_json(400, {"error": f"Unknown input type: {input_type}"})
                 return
-
-            # Analyze using ad_analyzer engine
-            data, raw_response = ad_analyzer.analyze_ad(client, contents)
 
             if data:
                 observed = data.get("observed", {})
@@ -267,6 +292,12 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             else:
                 user_msg = err_str
             self._send_json(500, {"error": user_msg})
+        finally:
+            if temp_video_cleanup and os.path.isfile(temp_video_cleanup):
+                try:
+                    os.remove(temp_video_cleanup)
+                except Exception:
+                    pass
 
 
 def main():
