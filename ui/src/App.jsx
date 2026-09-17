@@ -155,7 +155,7 @@ export default function App() {
 
   // Save Custom Key Modal
   const handleSaveCustomKey = (keyVal) => {
-    const trimmed = (keyVal || '').trim();
+    const trimmed = typeof keyVal === 'string' ? keyVal.trim() : '';
     setCustomApiKey(trimmed);
     if (trimmed) {
       localStorage.setItem('gemini_custom_api_key', trimmed);
@@ -171,7 +171,9 @@ export default function App() {
     setErrorMsg('');
     setCopySuccess('');
 
-    const effectiveKey = (overrideKey !== null ? overrideKey : customApiKey).trim();
+    // Ensure effectiveKey only uses overrideKey if it's a string (prevent React SyntheticEvent from breaking .trim())
+    const rawKey = typeof overrideKey === 'string' ? overrideKey : (typeof customApiKey === 'string' ? customApiKey : '');
+    const effectiveKey = rawKey.trim();
 
     if (activeTab === 'video' && !videoUrl.trim() && !videoData) {
       setErrorMsg('Please paste an Instagram Reel or YouTube link, or upload a video file.');
@@ -633,7 +635,7 @@ ${currentAnalysis.notes || 'N/A'}
             <button
               type="button"
               className={`btn-analyze ${loading ? 'loading' : ''}`}
-              onClick={handleAnalyze}
+              onClick={() => handleAnalyze()}
               disabled={loading}
             >
               {loading ? (
