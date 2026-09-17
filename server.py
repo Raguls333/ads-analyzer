@@ -507,6 +507,118 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": f"Failed executing Ad Strategy Agent pipeline: {err_str}", "details": err_str})
                 return
 
+        if parsed.path == "/api/strategy-agent/rewrite-script":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            niche = payload.get("niche", "").strip()
+            selected_gap = payload.get("selectedGap", "").strip()
+            offer = payload.get("offer", "").strip()
+            script_lang = payload.get("scriptLanguage", "tanglish").lower().strip()
+            existing_script = payload.get("existingScript", "").strip()
+            custom_instructions = payload.get("customInstructions", "").strip()
+
+            lang_instructions = {
+                "tamil": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION:\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in authentic, natural spoken TAMIL (தமிழ்).\n"
+                    "- Do NOT use stiff textbook/literary Tamil. It must sound conversational, exactly like a native Tamil content creator speaking passionately to their audience.\n"
+                    "- Visual scene directions, text overlays, and shot types can remain in English for the production crew, but the SPOKEN DIALOGUE lines must be in Tamil (தமிழ்)."
+                ),
+                "tanglish": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION:\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in colloquial TANGLISH (Tamil words transliterated into English/Latin script, the predominant conversational format for South Indian Instagram Reels & YouTube Shorts ads).\n"
+                    "- Example style: 'Neenga innum manual-ah Excel-la data enter panreengala? Daily 2 hours waste aagudha? Stop panunga! Orey click-la invoice generate pannunga...'\n"
+                    "- It must sound 100% natural, energetic, and relatable like an authentic South Indian creator speaking to a friend, avoiding formal corporate language."
+                ),
+                "hinglish": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION:\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in conversational HINGLISH (Hindi spoken dialogue written in Roman/English alphabet, widely used in Indian D2C & social ads).\n"
+                    "- Example style: 'Kya aap bhi har roz client follow-ups se pareshan ho? Daily 4 ghante waste ho rahe hain? Stop doing this manually...'"
+                ),
+                "hindi": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION:\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in spoken HINDI (हिंदी), punchy and conversational for social media reels."
+                ),
+                "english": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION:\n"
+                    "- Write the spoken dialogue lines in punchy, direct-response English with tension and economical dialogue (Tarantino/Wilder style)."
+                ),
+            }
+            lang_prompt = lang_instructions.get(script_lang, lang_instructions["english"])
+
+            rewrite_system_prompt = (
+                "You are an elite direct-response short-form scriptwriter with Quentin Tarantino's sense of pacing, "
+                "tension, and conversational bite, and Billy Wilder's economical, sharp dialogue. "
+                "You write 30-second high-converting social media scripts (Instagram Reels, YouTube Shorts, TikTok) "
+                "designed to be filmed on a phone by a solo creator with zero production budget.\n\n"
+                "Structure requirements:\n"
+                "1. HOOK (0-3s): Tension/curiosity line in the customer's own vernacular that stops the scroll immediately.\n"
+                "2. TENSION (3-6s): The contrast, painful statistic, or realization that raises the stakes.\n"
+                "3. PROOF (6-20s): 3 rapid beats, each a visual scene + one punchy spoken line, showing the transformation.\n"
+                "4. OBJECTION HANDLE (20-25s): Pre-emptively crush the single biggest hesitation or skepticism.\n"
+                "5. CTA (25-30s): Clear, urgent, low-friction next step.\n\n"
+                "For every beat specify:\n"
+                "- Shot Type (e.g. Close-up selfie, Screen record, Rapid cut)\n"
+                "- Visual Direction (action on screen)\n"
+                "- Spoken Line (spoken aloud in the specified language)\n"
+                "- On-Screen Text Overlay (bold caption for sound-off viewers)\n\n"
+                "Language must sound spoken, visceral, and authentic—never corporate or like a staged TV ad."
+            )
+
+            user_msg = (
+                f"REWRITE REQUEST — 30-SECOND DIRECT-RESPONSE SHORT-VIDEO SCRIPT\n"
+                f"NICHE / PRODUCT: {niche or 'General Product'}\n"
+                f"TARGETED CUSTOMER GAP: {selected_gap or 'Top market frustration'}\n"
+            )
+            if offer:
+                user_msg += f"CORE OFFER / VALUE PROPOSITION: {offer}\n"
+            user_msg += f"SCRIPT LANGUAGE: {script_lang.upper()}\n"
+
+            if existing_script:
+                user_msg += (
+                    f"\nCURRENT SCRIPT TO REWRITE (DO NOT REPEAT THIS HOOK OR ANGLE):\n"
+                    f"\"\"\"\n{existing_script[:800]}\n\"\"\"\n"
+                    f"Create a COMPLETELY FRESH, alternative hook angle (e.g. if the previous hook was a negative question, use a contrarian statement, a 'stop doing this' pattern interrupt, or an insider reveal).\n"
+                )
+
+            if custom_instructions:
+                user_msg += f"\nSPECIFIC CREATIVE DIRECTION FROM USER: {custom_instructions}\n"
+
+            user_msg += f"\n{lang_prompt}\n\nExecute the rewritten 30-second script now with full beat breakdown."
+
+            try:
+                client = genai.Client(api_key=api_key)
+                config_direct = types.GenerateContentConfig(
+                    system_instruction=rewrite_system_prompt,
+                )
+                raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_msg], config_direct)
+
+                self._send_json(200, {
+                    "success": True,
+                    "script": raw_text,
+                    "model": used_model,
+                    "scriptLanguage": script_lang,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed rewriting script: {err_str}", "details": err_str})
+                return
+
         if parsed.path != "/api/analyze":
             self._send_json(404, {"error": "Not found"})
             return

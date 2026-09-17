@@ -409,8 +409,17 @@ function extractStrategySnippet(text, type) {
     if (match) return match[0].replace(/^(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)\s*/i, '').trim();
     return '';
   }
+  if (type === 'offer') {
+    const s2Match = text.match(/(?:STAGE\s*2[\s\S]*?)(?:STAGE\s*3|$)/i);
+    if (s2Match) {
+      const offerMatch = s2Match[0].match(/(?:OFFER ENGINEERING|Irresistible offer statement|Core offer)[\s\S]*?(?:STAGE\s*3|$)/i);
+      if (offerMatch) return offerMatch[0].trim();
+      return s2Match[0].trim();
+    }
+    return '';
+  }
   if (type === 'prompt') {
-    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|EXECUTIVE SUMMARY|$)/i);
     const searchTarget = s3Match ? s3Match[0] : text;
     const codeMatch = searchTarget.match(/```(?:text|markdown|prompt)?\s*([\s\S]*?)```/);
     if (codeMatch) return codeMatch[1].trim();
@@ -419,13 +428,54 @@ function extractStrategySnippet(text, type) {
     return '';
   }
   if (type === 'script') {
-    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|EXECUTIVE SUMMARY|$)/i);
     const searchTarget = s3Match ? s3Match[0] : text;
-    const scriptMatch = searchTarget.match(/(?:HOOK\s*\(0-3s\)[\s\S]*?(?:STAGE\s*4|$))/i);
-    if (scriptMatch) return scriptMatch[0].trim();
-    return '';
+
+    // Look for Short-Video Script header
+    const scriptHeaderMatch = searchTarget.match(/(?:(?:#{1,4}\s*)?(?:Short[- ]Video|Video Script|30[- ]Second|Screenplay|SCRIPT)[\s\S]*?(?:STAGE\s*4|EXECUTIVE SUMMARY|$))/i);
+    if (scriptHeaderMatch) return scriptHeaderMatch[0].trim();
+
+    // Look for Hook beat
+    const hookMatch = searchTarget.match(/(?:(?:\*{1,2}|#{1,4}\s*)?(?:HOOK|Hook)[\s\S]*?(?:STAGE\s*4|EXECUTIVE SUMMARY|$))/i);
+    if (hookMatch) return hookMatch[0].trim();
+
+    // Fallback: If Stage 3 exists, return Stage 3 (excluding image prompt if present)
+    if (s3Match) {
+      const trimmedS3 = s3Match[0].trim();
+      return trimmedS3;
+    }
+    return text.trim();
   }
   return '';
+}
+
+function replaceScriptInStrategyText(fullText, newScript) {
+  if (!fullText) return newScript;
+
+  // Locate Stage 3
+  const s3Match = fullText.match(/(STAGE\s*3[\s\S]*?)(STAGE\s*4|EXECUTIVE SUMMARY|$)/i);
+  if (!s3Match) {
+    return fullText + '\n\n### REWRITTEN SHORT-VIDEO SCRIPT (30s)\n\n' + newScript;
+  }
+
+  const s3Full = s3Match[1];
+
+  // If Stage 3 contains a static ad prompt block (Canva prompt) before the script, preserve it!
+  const hasStaticPrompt = /(?:Canva|Image prompt|Prompt block|Midjourney)/i.test(s3Full);
+  if (hasStaticPrompt) {
+    const splitMatch = s3Full.match(/([\s\S]*?(?:```[\s\S]*?```|alternate headline variants[^\n]*\n\n))(?:[\s\S]*)/i);
+    if (splitMatch && splitMatch[1]) {
+      const preservedPrompt = splitMatch[1].trim();
+      const updatedS3 = `${preservedPrompt}\n\n### 30-Second Short-Video Script (Rewritten)\n\n${newScript.trim()}\n\n`;
+      return fullText.replace(s3Full, updatedS3);
+    }
+  }
+
+  // Otherwise replace Stage 3's body with the new script while keeping the section header
+  const headerMatch = s3Full.match(/(^[\s\S]*?STAGE\s*3[^\n]*\n(?:=*\n)?)/i);
+  const headerPrefix = headerMatch ? headerMatch[1] : '=====================================================\nSTAGE 3 — CREATIVE OUTPUT\n=====================================================\n\n';
+  const updatedS3 = `${headerPrefix}### 30-Second Short-Video Script (Rewritten)\n\n${newScript.trim()}\n\n`;
+  return fullText.replace(s3Full, updatedS3);
 }
 
 function FormattedStrategyMarkdown({ content, filterStage, onCopy }) {
@@ -656,6 +706,8 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
   const [strategyMeta, setStrategyMeta] = useState(null);
   const [activeStageFilter, setActiveStageFilter] = useState('all');
   const [copyNotice, setCopyNotice] = useState('');
+  const [rewritingScript, setRewritingScript] = useState(false);
+  const [scriptAngleHint, setScriptAngleHint] = useState('');
   const [strategyHistory, setStrategyHistory] = useState(() => {
     try {
       const raw = localStorage.getItem('ad_strategy_history');
@@ -1029,6 +1081,84 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
     } else {
       notifyCopy('Summary copied.');
       navigator.clipboard.writeText(strategyResult);
+    }
+  };
+
+  const handleRewriteScript = async (targetLang = null, customHint = '') => {
+    if (!strategyResult) return;
+    setRewritingScript(true);
+    setStrategyError('');
+
+    const langToUse = targetLang || scriptLanguage || 'tanglish';
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+
+    // Extract current script if available to avoid repeating the hook
+    const existingScript = extractStrategySnippet(strategyResult, 'script');
+    const offerSnippet = extractStrategySnippet(strategyResult, 'offer') || strategyMeta?.goal || '';
+
+    const payload = {
+      niche: strategyMeta?.niche || strategyNiche || '',
+      selectedGap: strategyMeta?.selectedGap || '',
+      offer: offerSnippet,
+      scriptLanguage: langToUse,
+      existingScript: existingScript,
+      customInstructions: customHint || scriptAngleHint,
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/strategy-agent/rewrite-script`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to rewrite script');
+      }
+
+      const newScript = data.script;
+      const updatedFullText = replaceScriptInStrategyText(strategyResult, newScript);
+
+      setStrategyResult(updatedFullText);
+      if (targetLang && targetLang !== scriptLanguage) {
+        setScriptLanguage(targetLang);
+      }
+
+      const updatedMeta = {
+        ...(strategyMeta || {}),
+        scriptLanguage: langToUse,
+        timestamp: new Date().toLocaleString(),
+      };
+      setStrategyMeta(updatedMeta);
+
+      // Update history in localStorage
+      setStrategyHistory((prev) => {
+        const updated = prev.map((item) =>
+          item.niche === updatedMeta.niche
+            ? { ...item, result: updatedFullText, scriptLanguage: langToUse, timestamp: updatedMeta.timestamp }
+            : item
+        );
+        try {
+          localStorage.setItem('ad_strategy_history', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed updating history:', e);
+        }
+        return updated;
+      });
+
+      // Switch view to Stage 3 tab so the user immediately sees the fresh script
+      setActiveStageFilter('stage3');
+      const langLabel = SCRIPT_LANGUAGES.find((l) => l.id === langToUse)?.label || langToUse;
+      notifyCopy(`✨ 30s Short-Video Script rewritten with a fresh angle! (${langLabel})`);
+    } catch (err) {
+      setStrategyError(err.message || 'Failed to rewrite script.');
+    } finally {
+      setRewritingScript(false);
     }
   };
 
@@ -1666,6 +1796,26 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
                   🎬 Copy 30s Script ({currentLangMeta.badge})
                 </button>
               )}
+              {hasScript && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm btn-rewrite-header-btn"
+                  onClick={() => handleRewriteScript()}
+                  disabled={rewritingScript}
+                  title="Rewrite the 30-second video script alone with a new hook angle and dialogue"
+                >
+                  {rewritingScript ? (
+                    <>
+                      <span className="spinner"></span>
+                      <span>Rewriting Script...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✍️ Rewrite Script Alone</span>
+                    </>
+                  )}
+                </button>
+              )}
               {hasPrompt && (
                 <button
                   type="button"
@@ -1718,6 +1868,93 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
           </div>
 
           <div className="strategy-content-body">
+            {/* Dedicated Short-Video Screenplay Control & Rewrite Card */}
+            {hasScript && (activeStageFilter === 'stage3' || activeStageFilter === 'all') && (
+              <div className="script-screenplay-control-card">
+                <div className="control-card-top-row">
+                  <div className="control-card-info">
+                    <span className="control-tag">Stage 3 • Direct-Response Short-Video Screenplay</span>
+                    <h4 className="control-heading">🎬 30-Second Video Script</h4>
+                    <span className="control-meta-pill">
+                      🗣️ Language: <strong>{currentLangMeta.label}</strong>
+                    </span>
+                  </div>
+
+                  <div className="control-card-buttons">
+                    <button
+                      type="button"
+                      className="btn-copy-script-main"
+                      onClick={handleCopyScript}
+                      title="Copy complete 30-second video script to clipboard"
+                    >
+                      📋 Copy Script
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-rewrite-script-main"
+                      onClick={() => handleRewriteScript()}
+                      disabled={rewritingScript}
+                      title="Generate a brand new script with alternative hook and dialogue"
+                    >
+                      {rewritingScript ? (
+                        <>
+                          <span className="spinner"></span>
+                          <span>Rewriting Script with Gemini...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🔄 Rewrite Script Alone (New Angle)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="control-card-quick-options">
+                  <div className="quick-switch-section">
+                    <span className="quick-section-label">Rewrite in another language:</span>
+                    <div className="quick-lang-pills">
+                      {SCRIPT_LANGUAGES.map((lang) => (
+                        <button
+                          key={lang.id}
+                          type="button"
+                          className={`lang-switch-btn ${scriptLanguage === lang.id ? 'active' : ''}`}
+                          onClick={() => handleRewriteScript(lang.id)}
+                          disabled={rewritingScript}
+                          title={`Click to rewrite the script in ${lang.label}`}
+                        >
+                          <span className="switch-flag">{lang.flag}</span>
+                          <span>{lang.badge}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="quick-angles-section">
+                    <span className="quick-section-label">Or choose a fresh hook angle:</span>
+                    <div className="quick-angle-chips">
+                      {[
+                        '🔥 Pain & Shocking Stat',
+                        '🤫 Contrarian Secret',
+                        '🛑 "Stop Doing This" Interrupt',
+                        '💸 Costly Mistake Exposed',
+                      ].map((angle, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="angle-chip"
+                          onClick={() => handleRewriteScript(scriptLanguage, angle)}
+                          disabled={rewritingScript}
+                        >
+                          {angle}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <FormattedStrategyMarkdown
               content={strategyResult}
               filterStage={activeStageFilter}
