@@ -2015,6 +2015,672 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
   );
 }
 
+// ---------------------------------------------------------------------------
+// Instagram Profile Auditor Constants & Helpers
+// ---------------------------------------------------------------------------
+const SAMPLE_INSTA_PROFILES = [
+  {
+    label: '🧠 @hubermanlab',
+    handle: '@hubermanlab',
+    url: 'https://www.instagram.com/hubermanlab/',
+    niche: 'Health, Neuroscience & Human Performance',
+  },
+  {
+    label: '💼 @alexhormozi',
+    handle: '@alexhormozi',
+    url: 'https://www.instagram.com/alexhormozi/',
+    niche: 'Business Growth, Scaling & Acquisition',
+  },
+  {
+    label: '🎨 @thefutur',
+    handle: '@thefutur',
+    url: 'https://www.instagram.com/thefutur/',
+    niche: 'Design, Brand Strategy & Creative Business',
+  },
+  {
+    label: '🍕 @zomato',
+    handle: '@zomato',
+    url: 'https://www.instagram.com/zomato/',
+    niche: 'Viral Indian Food Delivery & Meme Marketing',
+  },
+  {
+    label: '🏋️ @gymshark',
+    handle: '@gymshark',
+    url: 'https://www.instagram.com/gymshark/',
+    niche: 'Fitness Apparel, Workouts & Gym Humor',
+  },
+];
+
+function extractInstaAuditSnippet(text, type) {
+  if (!text) return '';
+  if (type === 'summary') {
+    const match = text.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    if (match) return match[0].replace(/^(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)\s*/i, '').trim();
+    return '';
+  }
+  if (type === 'reels' || type === 'plan') {
+    const match = text.match(/(?:STAGE\s*5[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    if (match) return match[0].trim();
+    return '';
+  }
+  return '';
+}
+
+function FormattedInstaAuditMarkdown({ content, filterStage, onCopy }) {
+  if (!content) return null;
+
+  let targetContent = content;
+  if (filterStage === 'summary') {
+    const match = content.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage1') {
+    const match = content.match(/(?:STAGE\s*1[\s\S]*?)(?:STAGE\s*2|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage2') {
+    const match = content.match(/(?:STAGE\s*2[\s\S]*?)(?:STAGE\s*3|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage3') {
+    const match = content.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage4') {
+    const match = content.match(/(?:STAGE\s*4[\s\S]*?)(?:STAGE\s*5|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage5') {
+    const match = content.match(/(?:STAGE\s*5[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    if (match) targetContent = match[0];
+  }
+
+  const lines = targetContent.split('\n');
+  const elements = [];
+  let inCodeBlock = false;
+  let codeBlockLines = [];
+  let codeBlockLang = '';
+  let inTable = false;
+  let tableRows = [];
+
+  const flushCode = (key) => {
+    if (codeBlockLines.length > 0) {
+      const codeText = codeBlockLines.join('\n');
+      elements.push(
+        <div key={key} className="strategy-code-box">
+          <div className="strategy-code-header">
+            <span className="code-lang-label">{codeBlockLang || 'Reel Script / Framework'}</span>
+            <button
+              type="button"
+              className="btn-copy-sm"
+              onClick={() => {
+                navigator.clipboard.writeText(codeText);
+                onCopy('Copied script block to clipboard!');
+              }}
+            >
+              📋 Copy
+            </button>
+          </div>
+          <pre className="strategy-code-pre">{codeText}</pre>
+        </div>
+      );
+      codeBlockLines = [];
+      codeBlockLang = '';
+    }
+  };
+
+  const flushTable = (key) => {
+    if (tableRows.length > 0) {
+      const headerRow = tableRows[0];
+      const dataRows = tableRows.slice(1).filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())));
+      elements.push(
+        <div key={key} className="strategy-table-scroll">
+          <table className="strategy-table">
+            <thead>
+              <tr>
+                {headerRow.map((cell, cIdx) => (
+                  <th key={cIdx}>{renderInlineMarkdown(cell.trim())}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx}>{renderInlineMarkdown(cell.trim())}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableRows = [];
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        flushCode(`code-${i}`);
+        inCodeBlock = false;
+      } else {
+        if (inTable) {
+          flushTable(`tbl-${i}`);
+          inTable = false;
+        }
+        inCodeBlock = true;
+        codeBlockLang = trimmed.replace('```', '').trim();
+        codeBlockLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const cells = trimmed.split('|').slice(1, -1);
+      const isSep = cells.every((c) => /^:?-+:?$/.test(c.trim()));
+      if (!isSep) {
+        inTable = true;
+        tableRows.push(cells);
+      }
+      continue;
+    } else if (inTable) {
+      flushTable(`tbl-${i}`);
+      inTable = false;
+    }
+
+    if (!trimmed) continue;
+    if (/^={4,}/.test(trimmed)) continue;
+
+    if (trimmed.startsWith('# ')) {
+      elements.push(<h2 key={`h1-${i}`} className="strategy-h1">{trimmed.replace(/^#\s+/, '')}</h2>);
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      elements.push(<h3 key={`h2-${i}`} className="strategy-h2">{trimmed.replace(/^##\s+/, '')}</h3>);
+      continue;
+    }
+    if (trimmed.startsWith('### ')) {
+      elements.push(<h4 key={`h3-${i}`} className="strategy-h3">{trimmed.replace(/^###\s+/, '')}</h4>);
+      continue;
+    }
+
+    if (/^STAGE\s*[1-5]/i.test(trimmed)) {
+      elements.push(
+        <div key={`stage-${i}`} className="strategy-stage-banner insta-stage-banner">
+          <span className="stage-banner-badge">STAGE</span>
+          <span className="stage-banner-text">{trimmed}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^(?:EXECUTIVE SUMMARY|Executive Summary)/i.test(trimmed)) {
+      elements.push(
+        <div key={`exec-${i}`} className="strategy-stage-banner exec-summary-banner">
+          <span className="stage-banner-badge exec-badge">⚡ SUMMARY</span>
+          <span className="stage-banner-text">{trimmed}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const bulletContent = trimmed.replace(/^[-*]\s+/, '');
+      elements.push(
+        <div key={`li-${i}`} className="strategy-li">
+          <span className="strategy-bullet">•</span>
+          <span className="strategy-li-text">{renderInlineMarkdown(bulletContent)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const match = trimmed.match(/^(\d+)\.\s+(.*)/);
+      elements.push(
+        <div key={`oli-${i}`} className="strategy-li">
+          <span className="strategy-number-badge">{match ? match[1] : '•'}</span>
+          <span className="strategy-li-text">{renderInlineMarkdown(match ? match[2] : trimmed)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith('>')) {
+      elements.push(
+        <blockquote key={`bq-${i}`} className="strategy-quote">
+          {renderInlineMarkdown(trimmed.replace(/^>\s*/, ''))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    elements.push(
+      <p key={`p-${i}`} className="strategy-p">
+        {renderInlineMarkdown(trimmed)}
+      </p>
+    );
+  }
+
+  if (inCodeBlock) flushCode('code-final');
+  if (inTable) flushTable('tbl-final');
+
+  return elements;
+}
+
+function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
+  const [profileInput, setProfileInput] = useState('');
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditStageIndex, setAuditStageIndex] = useState(0);
+  const [auditError, setAuditError] = useState('');
+  const [auditResult, setAuditResult] = useState('');
+  const [auditMeta, setAuditMeta] = useState(null);
+  const [activeStageFilter, setActiveStageFilter] = useState('all');
+  const [copyNotice, setCopyNotice] = useState('');
+  const [auditHistory, setAuditHistory] = useState(() => {
+    try {
+      const raw = localStorage.getItem('ad_insta_audits');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const notifyCopy = (msg) => {
+    setCopyNotice(msg);
+    setTimeout(() => setCopyNotice(''), 3000);
+  };
+
+  const handleRunAudit = async (targetVal = null) => {
+    const rawVal = (typeof targetVal === 'string' ? targetVal : profileInput).trim();
+    if (!rawVal) {
+      setAuditError('Please enter an Instagram profile URL or username handle (e.g. @alexhormozi or https://instagram.com/hubermanlab).');
+      return;
+    }
+
+    setAuditError('');
+    setAuditLoading(true);
+    setAuditStageIndex(1);
+
+    const timer = setInterval(() => {
+      setAuditStageIndex((prev) => (prev < 5 ? prev + 1 : prev));
+    }, 4500);
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const payload = { url: rawVal };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/insta-audit`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to analyze Instagram profile');
+      }
+
+      const resultText = data.result;
+      const meta = {
+        handle: data.handle || rawVal,
+        url: data.url || rawVal,
+        timestamp: new Date().toLocaleString(),
+        model: data.model || apiHealth.model || 'gemini-2.5-flash',
+      };
+
+      setAuditResult(resultText);
+      setAuditMeta(meta);
+      setActiveStageFilter('all');
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+
+      const historyItem = {
+        id: Date.now().toString(),
+        ...meta,
+        result: resultText,
+      };
+      setAuditHistory((prev) => {
+        const updated = [historyItem, ...prev.filter((p) => p.handle !== meta.handle)].slice(0, 20);
+        try {
+          localStorage.setItem('ad_insta_audits', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed saving insta audit history:', e);
+        }
+        return updated;
+      });
+    } catch (err) {
+      setAuditError(err.message || 'An error occurred while auditing the Instagram profile.');
+    } finally {
+      clearInterval(timer);
+      setAuditLoading(false);
+      setAuditStageIndex(0);
+    }
+  };
+
+  const handleCopyFullAudit = () => {
+    if (!auditResult) return;
+    navigator.clipboard.writeText(auditResult);
+    notifyCopy('Full Instagram Profile Audit copied to clipboard!');
+  };
+
+  const handleCopyReelPlan = () => {
+    const reelSnippet = extractInstaAuditSnippet(auditResult, 'reels');
+    if (reelSnippet) {
+      navigator.clipboard.writeText(reelSnippet);
+      notifyCopy('🎬 5 Outperforming Reel Ideas & Scripts copied!');
+    } else {
+      navigator.clipboard.writeText(auditResult);
+      notifyCopy('Audit copied to clipboard.');
+    }
+  };
+
+  const handleCopySummary = () => {
+    const summarySnippet = extractInstaAuditSnippet(auditResult, 'summary');
+    if (summarySnippet) {
+      navigator.clipboard.writeText(summarySnippet);
+      notifyCopy('Executive Summary copied!');
+    } else {
+      notifyCopy('Audit copied to clipboard.');
+      navigator.clipboard.writeText(auditResult);
+    }
+  };
+
+  const handleLoadHistory = (item) => {
+    setAuditResult(item.result);
+    setProfileInput(item.url || item.handle);
+    setAuditMeta({
+      handle: item.handle,
+      url: item.url,
+      timestamp: item.timestamp,
+      model: item.model,
+    });
+    setActiveStageFilter('all');
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const handleDeleteHistory = (id, e) => {
+    e.stopPropagation();
+    setAuditHistory((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('ad_insta_audits', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to delete history:', err);
+      }
+      return updated;
+    });
+  };
+
+  const hasReelPlan = Boolean(extractInstaAuditSnippet(auditResult, 'reels'));
+
+  return (
+    <div className="insta-audit-section">
+      {copyNotice && <div className="strategy-toast-notice">{copyNotice}</div>}
+
+      {/* Hero Header */}
+      <div className="strategy-hero-card insta-hero-card">
+        <div className="strategy-hero-badge insta-hero-badge">
+          <span className="badge-pulse"></span>
+          <span>Competitive Intelligence • Instagram Profile Auditor</span>
+        </div>
+        <h2 className="strategy-hero-title">Instagram Profile Auditor</h2>
+        <p className="strategy-hero-subtitle">
+          Paste any Instagram profile URL or handle. The AI investigates their top-performing Reels & Carousels, diagnoses what's working vs. broken, uncovers hidden niche content gaps, and builds an outperforming content plan with <strong>5 ready-to-shoot Reel ideas grounded in their winning videos</strong>.
+        </p>
+      </div>
+
+      {/* Input Form Card */}
+      <section className="card strategy-form-card insta-form-card">
+        <div className="form-group">
+          <div className="label-with-hint">
+            <label className="input-label" htmlFor="instaProfileInput">
+              <strong>Instagram Profile URL or Username Handle *</strong>
+            </label>
+            <span className="label-hint">Paste full link or @username</span>
+          </div>
+
+          <div className="insta-input-wrapper">
+            <span className="insta-prefix-icon">📸</span>
+            <input
+              id="instaProfileInput"
+              type="text"
+              className="url-field insta-text-field"
+              placeholder="e.g. https://www.instagram.com/hubermanlab/ or @alexhormozi or zomato"
+              value={profileInput}
+              onChange={(e) => setProfileInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleRunAudit();
+                }
+              }}
+            />
+          </div>
+
+          <div className="strategy-quick-chips">
+            <span className="chips-label">Popular creators to test:</span>
+            {SAMPLE_INSTA_PROFILES.map((sample, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="quick-chip-btn"
+                onClick={() => {
+                  setProfileInput(sample.url);
+                  handleRunAudit(sample.url);
+                }}
+              >
+                {sample.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {auditError && <div className="error-toast">{auditError}</div>}
+
+        <button
+          type="button"
+          className="btn-primary btn-run-pipeline btn-run-insta-audit"
+          onClick={() => handleRunAudit()}
+          disabled={auditLoading}
+        >
+          {auditLoading ? (
+            <>
+              <span className="spinner"></span>
+              <span>Auditing Profile Signals & Reels with Gemini...</span>
+            </>
+          ) : (
+            <>
+              <span>🔍 Run 5-Stage Instagram Profile Audit ➡️</span>
+            </>
+          )}
+        </button>
+      </section>
+
+      {/* Live Pipeline Step Progress Bar */}
+      {auditLoading && (
+        <div className="pipeline-progress-card">
+          <div className="progress-header">
+            <h4>⚡ Analyzing Instagram Profile Intelligence</h4>
+            <span className="progress-status-pill">Live Research</span>
+          </div>
+          <div className="pipeline-steps">
+            <div className={`pipeline-step ${auditStageIndex >= 1 ? 'active' : ''} ${auditStageIndex > 1 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 1 ? '✓' : '1'}</div>
+              <div className="step-body">
+                <strong>Stage 1: Content Formats & Engagement Signals</strong>
+                <span>Auditing Reels vs Carousels vs Static distribution and view/like ratios</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 2 ? 'active' : ''} ${auditStageIndex > 2 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 2 ? '✓' : '2'}</div>
+              <div className="step-body">
+                <strong>Stage 2: 5-10 Top Performing Posts & Hook Patterns</strong>
+                <span>Deconstructing 0-3s visual hooks, pacing, tone, and thumbnail contrast</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 3 ? 'active' : ''} ${auditStageIndex > 3 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 3 ? '✓' : '3'}</div>
+              <div className="step-body">
+                <strong>Stage 3: The Good & The Bad Audit</strong>
+                <span>Unvarnished diagnosis of authority strengths, buried captions & inconsistent cadence</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 4 ? 'active' : ''} ${auditStageIndex > 4 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 4 ? '✓' : '4'}</div>
+              <div className="step-body">
+                <strong>Stage 4: Niche Content Gaps & Competitor Opportunities</strong>
+                <span>Uncovering high-converting topics competitors cover that this account neglects</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 5 ? 'active' : ''}`}>
+              <div className="step-circle">{auditStageIndex >= 5 ? '⏳' : '5'}</div>
+              <div className="step-body">
+                <strong>Stage 5: Outperforming Content Plan & 5 Ready-to-Shoot Reels</strong>
+                <span>Writing 5 specific, grounded Reel scripts to outperform their best videos</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Results Presentation Card */}
+      {auditResult && !auditLoading && (
+        <div className="strategy-results-card insta-results-card">
+          <div className="strategy-results-header">
+            <div className="results-title-group">
+              <span className="strategy-topic-tag insta-tag">Instagram Profile Audit</span>
+              <h3 className="results-niche-title">{auditMeta?.handle || profileInput}</h3>
+              <div className="strategy-meta-tags">
+                <span className="meta-tag">
+                  🔗 <a href={auditMeta?.url || profileInput} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>
+                    View on Instagram ↗
+                  </a>
+                </span>
+                <span className="meta-tag">📅 {auditMeta?.timestamp}</span>
+                {auditMeta?.model && <span className="meta-tag model-tag">⚡ {auditMeta.model}</span>}
+              </div>
+            </div>
+
+            <div className="results-action-buttons">
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopyFullAudit}
+              >
+                📋 Copy Full Audit
+              </button>
+              {hasReelPlan && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyReelPlan}
+                >
+                  🎬 Copy 5 Reel Ideas
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopySummary}
+              >
+                ⚡ Copy Summary
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-action-sm"
+                onClick={() => {
+                  setAuditResult('');
+                  window.scrollTo({ top: 120, behavior: 'smooth' });
+                }}
+              >
+                🔄 Audit Another Profile
+              </button>
+            </div>
+          </div>
+
+          {/* Stage Filter Tabs */}
+          <div className="stage-filter-tabs">
+            {[
+              { id: 'all', label: '📋 All 5 Stages' },
+              { id: 'summary', label: '⚡ Executive Summary' },
+              { id: 'stage1', label: '📊 1. Formats & Engagement' },
+              { id: 'stage2', label: '🔥 2. Top Posts & Patterns' },
+              { id: 'stage3', label: '⚖️ 3. Good & Bad Audit' },
+              { id: 'stage4', label: '🎯 4. Niche Content Gaps' },
+              { id: 'stage5', label: '🚀 5. Outperforming 5-Reel Plan' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`stage-filter-btn ${activeStageFilter === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveStageFilter(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="strategy-content-body">
+            <FormattedInstaAuditMarkdown
+              content={auditResult}
+              filterStage={activeStageFilter}
+              onCopy={notifyCopy}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Saved Profile Audits History */}
+      {auditHistory.length > 0 && (
+        <section className="card strategy-history-card">
+          <div className="history-header">
+            <h4>💾 Saved Instagram Audits ({auditHistory.length})</h4>
+            <span className="history-subtitle">Past creator audits saved in local browser storage</span>
+          </div>
+
+          <div className="history-items-grid">
+            {auditHistory.map((item) => (
+              <div
+                key={item.id}
+                className="history-item-card"
+                onClick={() => handleLoadHistory(item)}
+              >
+                <div className="history-item-top">
+                  <span className="history-item-date">{item.timestamp}</span>
+                  <button
+                    type="button"
+                    className="btn-delete-history"
+                    title="Delete audit"
+                    onClick={(e) => handleDeleteHistory(item.id, e)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <h5 className="history-item-niche">{item.handle}</h5>
+                <div className="history-item-badges">
+                  <span className="badge-sm">Instagram Audit</span>
+                  {item.model && <span className="badge-sm">{item.model}</span>}
+                </div>
+                <button type="button" className="btn-load-history">
+                  Load Audit →
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('ad_analyzer_auth') === 'true';
@@ -2506,6 +3172,24 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
             <span className="pill-desc">Gap Research → Hormozi Offer → Creative → Meta Campaign</span>
           </div>
         </button>
+
+        <button
+          type="button"
+          className={`section-nav-pill ${mainSection === 'insta-audit' ? 'active' : ''}`}
+          onClick={() => {
+            setMainSection('insta-audit');
+            localStorage.setItem('ad_analyzer_section', 'insta-audit');
+          }}
+        >
+          <span className="pill-icon">📸</span>
+          <div className="pill-text-wrap">
+            <div className="pill-title-row">
+              <span className="pill-title">Instagram Profile Auditor</span>
+              <span className="pill-badge pill-badge-pink">Competitor Intel</span>
+            </div>
+            <span className="pill-desc">Formats • Top Posts • The Good/Bad • Gaps • 5 Reel Ideas</span>
+          </div>
+        </button>
       </nav>
 
       {/* Main Content Layout */}
@@ -2533,6 +3217,16 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
 
         {mainSection === 'strategy-agent' ? (
           <StrategyAgentSection
+            apiHealth={apiHealth}
+            customApiKey={customApiKey}
+            API_BASE={API_BASE}
+            onOpenKeyModal={() => {
+              setModalKeyInput(customApiKey);
+              setShowKeyModal(true);
+            }}
+          />
+        ) : mainSection === 'insta-audit' ? (
+          <InstaProfileAuditSection
             apiHealth={apiHealth}
             customApiKey={customApiKey}
             API_BASE={API_BASE}

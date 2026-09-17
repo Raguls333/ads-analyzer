@@ -4238,3 +4238,170 @@
     align-items: flex-start;
   }
 }
+
+/* ==========================================================================
+   Instagram Profile Auditor Section Styles
+   ========================================================================== */
+
+/* Navigation Pill Pink Badge */
+.pill-badge-pink {
+  background: linear-gradient(135deg, rgba(225, 48, 108, 0.35), rgba(253, 29, 29, 0.28));
+  border: 1px solid rgba(225, 48, 108, 0.65);
+  color: #fbcfe8;
+  box-shadow: 0 0 12px rgba(225, 48, 108, 0.35);
+}
+
+.section-nav-pill.active .pill-badge-pink {
+  background: linear-gradient(135deg, rgba(225, 48, 108, 0.5), rgba(253, 29, 29, 0.45));
+  border-color: #f43f5e;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(244, 63, 94, 0.5);
+}
+
+/* Container */
+.insta-audit-section {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Hero Card with Instagram Aurora Theme */
+.insta-hero-card {
+  background: linear-gradient(135deg, rgba(38, 16, 45, 0.85), rgba(20, 16, 32, 0.95));
+  border: 1px solid rgba(225, 48, 108, 0.35);
+  box-shadow: var(--shadow-card), 0 0 35px rgba(225, 48, 108, 0.12);
+}
+
+.insta-hero-card::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 260px;
+  height: 260px;
+  background: radial-gradient(circle, rgba(225, 48, 108, 0.25), rgba(131, 58, 180, 0.15) 50%, transparent 70%);
+  pointer-events: none;
+}
+
+.insta-hero-badge {
+  background: rgba(225, 48, 108, 0.16);
+  border: 1px solid rgba(225, 48, 108, 0.4);
+  color: #f472b6;
+}
+
+.insta-hero-badge .badge-pulse {
+  background: #f43f5e;
+  box-shadow: 0 0 8px #f43f5e;
+}
+
+/* Form Card & Instagram Input Wrapper */
+.insta-form-card {
+  border-color: rgba(225, 48, 108, 0.22);
+  box-shadow: var(--shadow-card), 0 4px 25px rgba(225, 48, 108, 0.06);
+}
+
+.insta-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.insta-prefix-icon {
+  position: absolute;
+  left: 16px;
+  font-size: 20px;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 1;
+}
+
+.insta-text-field {
+  padding-left: 48px;
+  font-size: 15.5px;
+  background: rgba(15, 18, 30, 0.85);
+  border-color: rgba(225, 48, 108, 0.28);
+  border-radius: var(--radius-md);
+  transition: all 0.25s ease;
+}
+
+.insta-text-field:focus {
+  border-color: #ec4899;
+  background: rgba(18, 22, 38, 0.95);
+  box-shadow: 0 0 0 3px rgba(236, 72, 153, 0.22), 0 0 20px rgba(225, 48, 108, 0.15);
+}
+
+/* Gradient Action Button (Instagram Signature Trio: Violet -> Rose -> Amber) */
+.btn-run-insta-audit {
+  background: linear-gradient(135deg, #833ab4 0%, #fd1d1d 55%, #fcb045 100%);
+  box-shadow: 0 4px 22px rgba(225, 48, 108, 0.45);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.btn-run-insta-audit:hover:not(:disabled) {
+  background: linear-gradient(135deg, #9333ea 0%, #e11d48 55%, #f59e0b 100%);
+  box-shadow: 0 6px 30px rgba(253, 29, 29, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Results Customization */
+.insta-results-card {
+  border-color: rgba(225, 48, 108, 0.3);
+  box-shadow: var(--shadow-card), 0 0 30px rgba(225, 48, 108, 0.12);
+}
+
+.insta-tag {
+  background: linear-gradient(135deg, rgba(225, 48, 108, 0.25), rgba(131, 58, 180, 0.25));
+  border-color: rgba(225, 48, 108, 0.45);
+  color: #fbcfe8;
+  font-weight: 700;
+}
+
+.insta-stage-banner {
+  border-left-color: #ec4899 !important;
+  background: linear-gradient(90deg, rgba(236, 72, 153, 0.12), transparent) !important;
+}
+
+/* Mobile & Tablet Adjustments for Instagram Auditor */
+@media (max-width: 1024px) {
+  .section-nav-bar {
+    flex-wrap: wrap;
+  }
+  
+  .section-nav-pill {
+    flex: 1 1 calc(33.333% - 12px);
+    min-width: 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  .section-nav-pill {
+    flex: 1 1 100%;
+    min-width: 100%;
+  }
+
+  .insta-input-wrapper {
+    flex-direction: row;
+  }
+
+  .insta-text-field {
+    font-size: 14px;
+    padding-left: 42px;
+  }
+
+  .insta-prefix-icon {
+    left: 12px;
+    font-size: 18px;
+  }
+
+  .btn-run-insta-audit {
+    padding: 14px 18px;
+    font-size: 14.5px;
+  }
+}
+

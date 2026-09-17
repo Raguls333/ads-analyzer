@@ -155,6 +155,68 @@ recommended starting budget — so the user can execute without re-reading
 everything."""
 
 
+INSTA_AUDIT_SYSTEM_INSTRUCTION = """You are an elite Instagram growth strategist, direct-response creative director, and competitive intelligence analyst.
+Given an Instagram profile URL or handle, conduct a deep, rigorous competitive audit by searching Google, public Instagram discussions, creator benchmarks, and social data.
+
+Analyze the profile thoroughly and structure your response into EXACTLY 5 distinct numbered stages, followed by an Executive Summary:
+
+=====================================================
+STAGE 1 — CONTENT FORMATS & ENGAGEMENT ANALYSIS
+=====================================================
+- Identify all content formats used (Reels, Carousels, Static image posts, Stories/Highlights).
+- Approximate format distribution (e.g. 70% Reels, 20% Carousels, 10% Static).
+- Determine which specific format performs BEST based on visible engagement signals (views, likes, comments, save/share intent).
+- Identify which format is neglected or underperforming, and why.
+
+=====================================================
+STAGE 2 — 5-10 TOP PERFORMING POSTS & PATTERNS
+=====================================================
+Identify 5 to 10 of their highest-performing recent posts/reels and deconstruct the core patterns:
+- Hook Patterns: Opening 0-3s visual cues, audio questions, or text overlays that stop the scroll.
+- Topic Themes: The exact problem statements or transformations that generate the highest engagement.
+- Tone & Delivery: Energy level, pacing, personality style (e.g., authoritative mentor, entertaining skeptic, vulnerable founder).
+- Editing & Production Style: Fast cuts vs single-take, B-roll usage, music/trending audio, on-screen captions.
+- Thumbnail / Cover Style: Visual contrast, text font, facial expressions, and feed aesthetic consistency.
+
+=====================================================
+STAGE 3 — THE GOOD & THE BAD AUDIT
+=====================================================
+Provide an honest, unvarnished diagnostic breakdown:
+1. WHAT'S WORKING WELL (The "Good"):
+   - Clear positioning, authentic creator presence, strong visual identity, social proof, high comment velocity, or authority signals.
+2. WHAT'S WEAK OR INCONSISTENT (The "Bad"):
+   - Inconsistent posting cadence, generic/buried captions, weak or missing CTAs, lack of community replies, low engagement relative to follower count, or lack of clear lead funnel.
+
+=====================================================
+STAGE 4 — NICHE CONTENT GAPS & COMPETITOR ADVANTAGES
+=====================================================
+- Uncover specific topics, sub-themes, and questions in their niche that competitors or viral creators cover, but this profile completely ignores.
+- Identify underserved audience segments or pain points left on the table.
+- Identify format gaps (e.g., lack of green-screen case studies, lack of step-by-step swipe carousels, lack of teardowns or behind-the-scenes failures).
+
+=====================================================
+STAGE 5 — OUTPERFORMING CONTENT PLAN & SPECIFIC REEL IDEAS
+=====================================================
+Deliver an actionable, ready-to-execute content strategy to build a page that out-competes them in this exact niche.
+CRITICAL: Ground every suggestion in their actual top videos — do NOT give generic social media advice!
+1. Profile Positioning & Optimization:
+   - Bio structure, clear transformation hook, and recommended lead magnet / bio link.
+2. Weekly Posting Cadence & Format Mix:
+   - Weekly breakdown (e.g. 4 Reels, 2 Carousels, daily Stories).
+3. 5 Ready-to-Shoot Reel Ideas (Grounded in their winning patterns, upgraded with better hooks & pacing):
+   - Reel 1: Title, Exact 0-3s Hook, Visual Action, 3 Story Beats, CTA.
+   - Reel 2: Title, Exact 0-3s Hook, Visual Action, 3 Story Beats, CTA.
+   - Reel 3: Title, Exact 0-3s Hook, Visual Action, 3 Story Beats, CTA.
+   - Reel 4: Title, Exact 0-3s Hook, Visual Action, 3 Story Beats, CTA.
+   - Reel 5: Title, Exact 0-3s Hook, Visual Action, 3 Story Beats, CTA.
+
+=====================================================
+EXECUTIVE SUMMARY
+=====================================================
+A concise, punchy 1-paragraph summary: their core secret to growth, their single biggest vulnerability, and the #1 strategic lever to outperform them in the next 90 days.
+"""
+
+
 GAPS_RESEARCH_SYSTEM_INSTRUCTION = """You are a direct-response market research specialist discovering real customer gaps & pain points.
 Given a niche, product, or service, search Reddit, Facebook groups, Google reviews/forums, niche blogs, and TikTok comments for real discussions.
 Pull direct emotional language people use when they complain, ask questions, or express frustration about existing solutions.
@@ -617,6 +679,87 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 err_str = str(e)
                 self._send_json(500, {"error": f"Failed rewriting script: {err_str}", "details": err_str})
+                return
+
+        if parsed.path == "/api/insta-audit":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            raw_input = payload.get("url", "").strip()
+            if not raw_input:
+                self._send_json(400, {"error": "Instagram profile URL or username handle is required."})
+                return
+
+            # Clean and normalize handle & URL
+            clean_url = raw_input
+            clean_handle = raw_input
+            if "instagram.com/" in clean_url:
+                try:
+                    parts = clean_url.split("instagram.com/")[1].split("/")[0].split("?")[0]
+                    clean_handle = "@" + parts.lstrip("@")
+                    clean_url = f"https://www.instagram.com/{parts.lstrip('@')}/"
+                except Exception:
+                    clean_handle = raw_input
+            else:
+                stripped = raw_input.lstrip("@").strip()
+                clean_handle = "@" + stripped
+                clean_url = f"https://www.instagram.com/{stripped}/"
+
+            user_query = (
+                f"Analyze this Instagram profile: {clean_url} (Username / Handle: {clean_handle})\n\n"
+                "Search Google, public Instagram discussions, reels indexes, and social databases to perform a complete 5-stage competitive audit strictly following these requirements:\n"
+                "1. Identify what content formats they use (reels, carousels, static posts) and which ones seem to perform best based on visible engagement signals.\n"
+                "2. Pull out 5-10 of their best-performing recent posts/reels and identify common patterns: hooks, topics, tone, posting style, thumbnail/cover style.\n"
+                "3. Tell me what's working well (the 'good') and what's weak or inconsistent (the 'bad') — e.g. posting frequency, caption quality, niche focus, engagement-to-follower ratio if visible.\n"
+                "4. Identify content gaps: topics or formats in their niche that they haven't covered but competitors/similar accounts have.\n"
+                "5. Based on all of the above, suggest a content plan/direction I could use to build a similar or better-performing page in the same niche — specific reel ideas, formats, and posting cadence, not generic advice.\n\n"
+                "Use their actual top videos as reference points when making suggestions — ground every recommendation in something specific you found on their profile, not generic social media tips."
+            )
+
+            try:
+                client = genai.Client(api_key=api_key)
+                raw_text = None
+                used_model = None
+
+                # Attempt search grounding tool first for real-time web intelligence
+                try:
+                    search_tool = types.Tool(google_search=types.GoogleSearch())
+                    config_with_search = types.GenerateContentConfig(
+                        system_instruction=INSTA_AUDIT_SYSTEM_INSTRUCTION,
+                        tools=[search_tool],
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_with_search)
+                except Exception as e_search:
+                    print(f"Search grounding unavailable for insta audit ({e_search}). Retrying with direct config ...")
+                    config_direct = types.GenerateContentConfig(
+                        system_instruction=INSTA_AUDIT_SYSTEM_INSTRUCTION,
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_direct)
+
+                self._send_json(200, {
+                    "success": True,
+                    "result": raw_text,
+                    "handle": clean_handle,
+                    "url": clean_url,
+                    "model": used_model,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed analyzing Instagram profile: {err_str}", "details": err_str})
                 return
 
         if parsed.path != "/api/analyze":
