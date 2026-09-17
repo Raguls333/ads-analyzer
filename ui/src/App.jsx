@@ -290,6 +290,44 @@ function PasscodeGate({ onUnlock }) {
 // ---------------------------------------------------------------------------
 const AVAILABLE_PLATFORMS = ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'LinkedIn'];
 
+const SCRIPT_LANGUAGES = [
+  {
+    id: 'tanglish',
+    label: 'Tanglish (Conversational Tamil)',
+    badge: 'Tanglish',
+    flag: '🇮🇳',
+    hint: 'Colloquial Tamil dialogue in English script (e.g. "Neenga innum excel-la accounts panreengala? Stop panunga!"). High converting for IG Reels & Shorts.',
+  },
+  {
+    id: 'tamil',
+    label: 'Tamil (தமிழ்)',
+    badge: 'தமிழ்',
+    flag: '🇮🇳',
+    hint: 'Authentic, natural spoken Tamil dialogue written in Tamil script for direct-response South Indian video ads.',
+  },
+  {
+    id: 'english',
+    label: 'English',
+    badge: 'English',
+    flag: '🌐',
+    hint: 'Direct-response punchy English dialogue with tension, proof beats, and fast-paced hook retention.',
+  },
+  {
+    id: 'hinglish',
+    label: 'Hinglish (Conversational Hindi)',
+    badge: 'Hinglish',
+    flag: '🇮🇳',
+    hint: 'Conversational Hindi dialogue written in English script (e.g. "Kya aap bhi client follow-ups se pareshan ho?").',
+  },
+  {
+    id: 'hindi',
+    label: 'Hindi (हिंदी)',
+    badge: 'हिंदी',
+    flag: '🇮🇳',
+    hint: 'Spoken Hindi dialogue in Devanagari script for social video ads.',
+  },
+];
+
 const PRESET_GOALS = [
   { id: 'Book Free Demo / Consultation Call', label: '📞 Book Free Demo / Call' },
   { id: 'Direct E-Commerce Purchase', label: '🛒 Direct Purchase' },
@@ -591,11 +629,26 @@ function FormattedStrategyMarkdown({ content, filterStage, onCopy }) {
 }
 
 function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
+  // Input parameters
   const [strategyNiche, setStrategyNiche] = useState('');
   const [strategyPlatforms, setStrategyPlatforms] = useState(['Instagram', 'Facebook']);
   const [strategyGoal, setStrategyGoal] = useState('Book Free Demo / Consultation Call');
   const [strategyCustomGoal, setStrategyCustomGoal] = useState('');
   const [strategyFormat, setStrategyFormat] = useState('both');
+  const [scriptLanguage, setScriptLanguage] = useState('tanglish');
+
+  // Pipeline phases: 'setup' | 'gaps' | 'strategy'
+  const [currentPhase, setCurrentPhase] = useState('setup');
+
+  // Stage 1 Gaps state
+  const [gapsList, setGapsList] = useState([]);
+  const [selectedGapId, setSelectedGapId] = useState('');
+  const [customGapText, setCustomGapText] = useState('');
+  const [aiRecommendation, setAiRecommendation] = useState(null);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [moreGapsLoading, setMoreGapsLoading] = useState(false);
+
+  // Strategy Execution state
   const [strategyLoading, setStrategyLoading] = useState(false);
   const [strategyStageIndex, setStrategyStageIndex] = useState(0);
   const [strategyError, setStrategyError] = useState('');
@@ -617,15 +670,173 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
     setTimeout(() => setCopyNotice(''), 3000);
   };
 
-  const handleRunPipeline = async () => {
+  // Helper: Get active script language metadata
+  const currentLangMeta = SCRIPT_LANGUAGES.find((l) => l.id === scriptLanguage) || SCRIPT_LANGUAGES[0];
+
+  // Helper: Format intensity badge
+  const renderIntensityBadge = (intensity) => {
+    const raw = String(intensity || 'High').toLowerCase();
+    let badgeClass = 'intensity-high';
+    let label = intensity || 'High';
+    if (raw.includes('extreme')) {
+      badgeClass = 'intensity-extreme';
+      label = '🔥 Extreme Pain';
+    } else if (raw.includes('very high') || raw.includes('very')) {
+      badgeClass = 'intensity-very-high';
+      label = '⚡ Very High Pain';
+    } else {
+      label = '⚠️ High Pain';
+    }
+    return <span className={`gap-intensity-pill ${badgeClass}`}>{label}</span>;
+  };
+
+  // Step 1: Discover Market Gaps & Pain Points
+  const handleDiscoverGaps = async () => {
     const trimmedNiche = strategyNiche.trim();
     if (!trimmedNiche) {
-      setStrategyError('Please enter a niche, product, or service topic to run the strategy pipeline.');
+      setStrategyError('Please enter a niche, product, or service topic to discover market gaps.');
       return;
     }
     setStrategyError('');
+    setGapsLoading(true);
+    setCurrentPhase('gaps');
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const payload = {
+      niche: trimmedNiche,
+      platforms: strategyPlatforms.join(', ') || 'Instagram, Facebook',
+      excludeGaps: [],
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/strategy-agent/gaps`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to research market gaps and pain points');
+      }
+
+      const researchData = data.data || {};
+      const rawGaps = Array.isArray(researchData.gaps) ? researchData.gaps : [];
+      setGapsList(rawGaps);
+      setAiRecommendation({
+        id: researchData.recommended_gap_id || (rawGaps[0] ? rawGaps[0].id : ''),
+        reason: researchData.recommended_reason || 'Identified as the highest-converting and most emotionally charged gap.',
+      });
+
+      // Default select the recommended gap or the first one
+      if (researchData.recommended_gap_id && rawGaps.some((g) => g.id === researchData.recommended_gap_id)) {
+        setSelectedGapId(researchData.recommended_gap_id);
+      } else if (rawGaps.length > 0) {
+        setSelectedGapId(rawGaps[0].id);
+      }
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+    } catch (err) {
+      setStrategyError(err.message || 'Failed to research customer pain points. Please try again.');
+      setCurrentPhase('setup');
+    } finally {
+      setGapsLoading(false);
+    }
+  };
+
+  // Step 1b: User asks for MORE pain points & gaps
+  const handleFindMoreGaps = async () => {
+    const trimmedNiche = strategyNiche.trim();
+    if (!trimmedNiche) return;
+
+    setMoreGapsLoading(true);
+    setStrategyError('');
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    // Collect existing gaps to explicitly exclude duplicates
+    const excludeList = gapsList.map((g) => `${g.title || ''}: ${g.gap_statement || ''}`).filter(Boolean);
+
+    const payload = {
+      niche: trimmedNiche,
+      platforms: strategyPlatforms.join(', ') || 'Instagram, Facebook',
+      excludeGaps: excludeList,
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/strategy-agent/gaps`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to find additional pain points');
+      }
+
+      const researchData = data.data || {};
+      const newGaps = Array.isArray(researchData.gaps) ? researchData.gaps : [];
+      if (newGaps.length === 0) {
+        notifyCopy('No additional distinct angles found.');
+        return;
+      }
+
+      // Re-index new gaps to avoid ID collisions
+      const baseRank = gapsList.length;
+      const formattedNew = newGaps.map((g, idx) => ({
+        ...g,
+        id: `gap_batch2_${baseRank + idx + 1}`,
+        frequency_rank: baseRank + idx + 1,
+        isNewBatch: true,
+      }));
+
+      setGapsList((prev) => [...prev, ...formattedNew]);
+      notifyCopy(`✨ Discovered ${formattedNew.length} additional fresh market gaps!`);
+    } catch (err) {
+      setStrategyError(err.message || 'Failed to fetch more pain points.');
+    } finally {
+      setMoreGapsLoading(false);
+    }
+  };
+
+  // Step 2-4: Proceed with Selected Gap to generate Offer, Creatives & Meta Architecture
+  const handleRunPipelineWithSelectedGap = async () => {
+    const trimmedNiche = strategyNiche.trim();
+    if (!trimmedNiche) {
+      setStrategyError('Please enter a niche topic.');
+      return;
+    }
+
+    let chosenGapText = '';
+    let chosenGapTitle = '';
+    if (selectedGapId === 'custom') {
+      chosenGapText = customGapText.trim();
+      chosenGapTitle = 'Custom Market Gap';
+      if (!chosenGapText) {
+        setStrategyError('Please write your custom gap or pain point statement.');
+        return;
+      }
+    } else {
+      const found = gapsList.find((g) => g.id === selectedGapId);
+      if (!found) {
+        setStrategyError('Please select a customer gap card above before proceeding.');
+        return;
+      }
+      chosenGapTitle = found.title;
+      chosenGapText = `${found.title} — "${found.gap_statement}" (Why it matters: ${found.why_it_matters || 'Critical customer frustration'})`;
+    }
+
+    setStrategyError('');
     setStrategyLoading(true);
-    setStrategyStageIndex(1);
+    setCurrentPhase('strategy');
+    setStrategyStageIndex(2); // Stage 1 is already selected!
 
     const timer = setInterval(() => {
       setStrategyStageIndex((prev) => (prev < 4 ? prev + 1 : prev));
@@ -633,21 +844,20 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
 
     const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
     const finalGoal = strategyGoal === 'custom' ? (strategyCustomGoal.trim() || 'Direct Conversion') : strategyGoal;
+
     const payload = {
       niche: trimmedNiche,
       platforms: strategyPlatforms.join(', ') || 'Instagram, Facebook',
       goal: finalGoal,
       formatPreference: strategyFormat,
+      selectedGap: chosenGapText,
+      scriptLanguage: scriptLanguage,
     };
-    if (effectiveKey) {
-      payload.apiKey = effectiveKey;
-    }
+    if (effectiveKey) payload.apiKey = effectiveKey;
 
     try {
       const headers = { 'Content-Type': 'application/json' };
-      if (effectiveKey) {
-        headers['X-Gemini-API-Key'] = effectiveKey;
-      }
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
 
       const res = await fetch(`${API_BASE}/api/strategy-agent`, {
         method: 'POST',
@@ -666,6 +876,9 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
         platforms: payload.platforms,
         goal: payload.goal,
         format: strategyFormat,
+        selectedGapTitle: chosenGapTitle,
+        selectedGap: chosenGapText,
+        scriptLanguage: scriptLanguage,
         timestamp: new Date().toLocaleString(),
         model: data.model || apiHealth.model || 'gemini-2.5-flash',
       };
@@ -673,6 +886,89 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
       setStrategyResult(resultText);
       setStrategyMeta(meta);
       setActiveStageFilter('all');
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+
+      const historyItem = {
+        id: Date.now().toString(),
+        ...meta,
+        result: resultText,
+      };
+      setStrategyHistory((prev) => {
+        const updated = [historyItem, ...prev.filter((p) => p.niche !== trimmedNiche)].slice(0, 20);
+        try {
+          localStorage.setItem('ad_strategy_history', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed saving strategy history:', e);
+        }
+        return updated;
+      });
+    } catch (err) {
+      setStrategyError(err.message || 'An error occurred while generating the strategy.');
+      // Keep on strategy phase or return so user sees error
+    } finally {
+      clearInterval(timer);
+      setStrategyLoading(false);
+      setStrategyStageIndex(0);
+    }
+  };
+
+  // Instant Full Pipeline (Auto-pick top gap without intermediate screen)
+  const handleRunInstantPipeline = async () => {
+    const trimmedNiche = strategyNiche.trim();
+    if (!trimmedNiche) {
+      setStrategyError('Please enter a niche, product, or service topic.');
+      return;
+    }
+    setStrategyError('');
+    setStrategyLoading(true);
+    setCurrentPhase('strategy');
+    setStrategyStageIndex(1);
+
+    const timer = setInterval(() => {
+      setStrategyStageIndex((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 4500);
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const finalGoal = strategyGoal === 'custom' ? (strategyCustomGoal.trim() || 'Direct Conversion') : strategyGoal;
+    const payload = {
+      niche: trimmedNiche,
+      platforms: strategyPlatforms.join(', ') || 'Instagram, Facebook',
+      goal: finalGoal,
+      formatPreference: strategyFormat,
+      scriptLanguage: scriptLanguage,
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/strategy-agent`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate ad strategy');
+      }
+
+      const resultText = data.result;
+      const meta = {
+        niche: trimmedNiche,
+        platforms: payload.platforms,
+        goal: payload.goal,
+        format: strategyFormat,
+        scriptLanguage: scriptLanguage,
+        timestamp: new Date().toLocaleString(),
+        model: data.model || apiHealth.model || 'gemini-2.5-flash',
+      };
+
+      setStrategyResult(resultText);
+      setStrategyMeta(meta);
+      setActiveStageFilter('all');
+      window.scrollTo({ top: 120, behavior: 'smooth' });
 
       const historyItem = {
         id: Date.now().toString(),
@@ -709,7 +1005,7 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
       navigator.clipboard.writeText(promptSnippet);
       notifyCopy('Canva/Gemini Image Prompt copied!');
     } else {
-      notifyCopy('Prompt block copied.');
+      notifyCopy('Strategy copied to clipboard.');
       navigator.clipboard.writeText(strategyResult);
     }
   };
@@ -718,9 +1014,9 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
     const scriptSnippet = extractStrategySnippet(strategyResult, 'script');
     if (scriptSnippet) {
       navigator.clipboard.writeText(scriptSnippet);
-      notifyCopy('30-Second Video Screenplay copied!');
+      notifyCopy(`30-Second Video Screenplay (${currentLangMeta.label}) copied!`);
     } else {
-      notifyCopy('Script block copied.');
+      notifyCopy('Strategy copied to clipboard.');
       navigator.clipboard.writeText(strategyResult);
     }
   };
@@ -739,16 +1035,21 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
   const handleLoadHistory = (item) => {
     setStrategyResult(item.result);
     setStrategyNiche(item.niche);
+    if (item.scriptLanguage) setScriptLanguage(item.scriptLanguage);
     setStrategyMeta({
       niche: item.niche,
       platforms: item.platforms,
       goal: item.goal,
       format: item.format,
+      selectedGap: item.selectedGap,
+      selectedGapTitle: item.selectedGapTitle,
+      scriptLanguage: item.scriptLanguage || 'tanglish',
       timestamp: item.timestamp,
       model: item.model,
     });
+    setCurrentPhase('strategy');
     setActiveStageFilter('all');
-    window.scrollTo({ top: 200, behavior: 'smooth' });
+    window.scrollTo({ top: 120, behavior: 'smooth' });
   };
 
   const handleDeleteHistory = (id, e) => {
@@ -767,10 +1068,17 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
   const hasPrompt = Boolean(extractStrategySnippet(strategyResult, 'prompt'));
   const hasScript = Boolean(extractStrategySnippet(strategyResult, 'script'));
 
+  // Determine if proceed button should be active
+  const isGapSelected = Boolean(
+    (selectedGapId && selectedGapId !== 'custom') ||
+    (selectedGapId === 'custom' && customGapText.trim())
+  );
+
   return (
     <div className="strategy-agent-section">
       {copyNotice && <div className="strategy-toast-notice">{copyNotice}</div>}
 
+      {/* Hero Header */}
       <div className="strategy-hero-card">
         <div className="strategy-hero-badge">
           <span className="badge-pulse"></span>
@@ -778,166 +1086,488 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
         </div>
         <h2 className="strategy-hero-title">Ad Strategy Agent</h2>
         <p className="strategy-hero-subtitle">
-          Give any niche, product, or service. The agent conducts real-time cross-platform gap research (Reddit, Google, TikTok, Facebook), engineers an Alex Hormozi irresistible offer, scripts direct-response creatives (Canva prompts & a 30s Tarantino/Wilder video screenplay), and designs the complete Meta campaign architecture.
+          Discover real market gaps from Reddit, TikTok, and reviews. Select your preferred customer pain point, then engineer an Alex Hormozi offer, direct-response creative scripts in your chosen language (<strong>Tanglish</strong>, <strong>Tamil</strong>, or <strong>English</strong>), and Meta campaign architecture.
         </p>
+
+        {/* Pipeline Phase Breadcrumb Bar */}
+        <div className="pipeline-phase-breadcrumbs">
+          <button
+            type="button"
+            className={`phase-crumb ${currentPhase === 'setup' ? 'active' : 'done'}`}
+            onClick={() => setCurrentPhase('setup')}
+          >
+            <span className="crumb-number">1</span>
+            <span className="crumb-label">Topic & Language</span>
+          </button>
+          <span className="crumb-sep">→</span>
+          <button
+            type="button"
+            className={`phase-crumb ${currentPhase === 'gaps' ? 'active' : gapsList.length > 0 ? 'done' : 'disabled'}`}
+            onClick={() => gapsList.length > 0 && setCurrentPhase('gaps')}
+            disabled={gapsList.length === 0}
+          >
+            <span className="crumb-number">2</span>
+            <span className="crumb-label">Select Market Gap</span>
+            {gapsList.length > 0 && <span className="crumb-count">({gapsList.length})</span>}
+          </button>
+          <span className="crumb-sep">→</span>
+          <button
+            type="button"
+            className={`phase-crumb ${currentPhase === 'strategy' ? 'active' : strategyResult ? 'done' : 'disabled'}`}
+            onClick={() => strategyResult && setCurrentPhase('strategy')}
+            disabled={!strategyResult}
+          >
+            <span className="crumb-number">3</span>
+            <span className="crumb-label">Offer & Creative Scripts</span>
+          </button>
+        </div>
       </div>
 
-      <section className="card strategy-form-card">
-        <div className="form-group">
-          <div className="label-with-hint">
-            <label className="input-label" htmlFor="strategyNicheInput">
-              <strong>1. Niche / Product / Service Topic *</strong>
-            </label>
-            <span className="label-hint">Be specific for deeper gap-to-creative insights</span>
-          </div>
-          <textarea
-            id="strategyNicheInput"
-            className="strategy-textarea"
-            rows={3}
-            placeholder="e.g., B2B SaaS lead-gen campaign targeting Indian manufacturers, or Cold plunge tubs for fitness enthusiasts, or AI bookkeeping for Shopify stores"
-            value={strategyNiche}
-            onChange={(e) => setStrategyNiche(e.target.value)}
-          />
-          <div className="strategy-quick-chips">
-            <span className="chips-label">Quick test examples:</span>
-            {SAMPLE_NICHES.map((sample, idx) => (
-              <button
-                key={idx}
-                type="button"
-                className="quick-chip-btn"
-                onClick={() => {
-                  setStrategyNiche(sample.niche);
-                  setStrategyGoal(sample.goal);
-                  setStrategyPlatforms(sample.platforms);
-                  setStrategyFormat(sample.format);
-                }}
-              >
-                {sample.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label className="input-label">
-            <strong>2. Platform(s) to Advertise On</strong>
-          </label>
-          <div className="platform-pills-row">
-            {AVAILABLE_PLATFORMS.map((platform) => {
-              const isSelected = strategyPlatforms.includes(platform);
-              return (
+      {/* ---------------------------------------------------------------------
+          PHASE 1: TOPIC & CONFIG SETUP FORM
+      --------------------------------------------------------------------- */}
+      {currentPhase === 'setup' && (
+        <section className="card strategy-form-card">
+          <div className="form-group">
+            <div className="label-with-hint">
+              <label className="input-label" htmlFor="strategyNicheInput">
+                <strong>1. Niche / Product / Service Topic *</strong>
+              </label>
+              <span className="label-hint">Be specific for deeper customer pain point discovery</span>
+            </div>
+            <textarea
+              id="strategyNicheInput"
+              className="strategy-textarea"
+              rows={3}
+              placeholder="e.g., B2B SaaS lead-gen targeting Indian manufacturers with inventory automation, or Cold plunge ice bath tubs for fitness enthusiasts, or AI bookkeeping for Shopify stores"
+              value={strategyNiche}
+              onChange={(e) => setStrategyNiche(e.target.value)}
+            />
+            <div className="strategy-quick-chips">
+              <span className="chips-label">Quick test examples:</span>
+              {SAMPLE_NICHES.map((sample, idx) => (
                 <button
-                  key={platform}
+                  key={idx}
                   type="button"
-                  className={`platform-pill ${isSelected ? 'selected' : ''}`}
+                  className="quick-chip-btn"
                   onClick={() => {
-                    if (isSelected) {
-                      if (strategyPlatforms.length > 1) {
-                        setStrategyPlatforms(strategyPlatforms.filter((p) => p !== platform));
-                      }
-                    } else {
-                      setStrategyPlatforms([...strategyPlatforms, platform]);
-                    }
+                    setStrategyNiche(sample.niche);
+                    setStrategyGoal(sample.goal);
+                    setStrategyPlatforms(sample.platforms);
+                    setStrategyFormat(sample.format);
                   }}
                 >
-                  <span className="pill-check">{isSelected ? '✓' : '+'}</span>
-                  <span>{platform}</span>
+                  {sample.label}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="form-group">
-          <label className="input-label">
-            <strong>3. Primary CTA / Conversion Goal</strong>
-          </label>
-          <div className="goal-pills-row">
-            {PRESET_GOALS.map((g) => (
+          {/* SCRIPT LANGUAGE SELECTION (English, Tamil, Tanglish, etc.) */}
+          <div className="form-group script-lang-group">
+            <div className="label-with-hint">
+              <label className="input-label">
+                <strong>2. Script Language for 30s Short-Video Ad (Reels / Shorts)</strong>
+              </label>
+              <span className="label-pill-badge">Direct-Response Conversational</span>
+            </div>
+            <div className="language-pills-row">
+              {SCRIPT_LANGUAGES.map((lang) => {
+                const isSelected = scriptLanguage === lang.id;
+                return (
+                  <button
+                    key={lang.id}
+                    type="button"
+                    className={`lang-pill ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setScriptLanguage(lang.id)}
+                  >
+                    <span className="lang-flag">{lang.flag}</span>
+                    <span className="lang-label">{lang.label}</span>
+                    {isSelected && <span className="lang-check">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="lang-hint-box">
+              <span className="lang-hint-icon">💡</span>
+              <span className="lang-hint-desc">{currentLangMeta.hint}</span>
+            </div>
+          </div>
+
+          {/* Platforms to Advertise On */}
+          <div className="form-group">
+            <label className="input-label">
+              <strong>3. Platform(s) to Advertise On</strong>
+            </label>
+            <div className="platform-pills-row">
+              {AVAILABLE_PLATFORMS.map((platform) => {
+                const isSelected = strategyPlatforms.includes(platform);
+                return (
+                  <button
+                    key={platform}
+                    type="button"
+                    className={`platform-pill ${isSelected ? 'selected' : ''}`}
+                    onClick={() => {
+                      if (isSelected) {
+                        if (strategyPlatforms.length > 1) {
+                          setStrategyPlatforms(strategyPlatforms.filter((p) => p !== platform));
+                        }
+                      } else {
+                        setStrategyPlatforms([...strategyPlatforms, platform]);
+                      }
+                    }}
+                  >
+                    <span className="pill-check">{isSelected ? '✓' : '+'}</span>
+                    <span>{platform}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Primary CTA / Conversion Goal */}
+          <div className="form-group">
+            <label className="input-label">
+              <strong>4. Primary CTA / Conversion Goal</strong>
+            </label>
+            <div className="goal-pills-row">
+              {PRESET_GOALS.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  className={`goal-pill ${strategyGoal === g.id ? 'selected' : ''}`}
+                  onClick={() => setStrategyGoal(g.id)}
+                >
+                  <span>{g.label}</span>
+                </button>
+              ))}
+            </div>
+            {strategyGoal === 'custom' && (
+              <input
+                type="text"
+                className="url-field custom-goal-input"
+                placeholder="Enter your custom conversion goal / CTA..."
+                value={strategyCustomGoal}
+                onChange={(e) => setStrategyCustomGoal(e.target.value)}
+                autoFocus
+              />
+            )}
+          </div>
+
+          {/* Creative Format Preference */}
+          <div className="form-group">
+            <label className="input-label">
+              <strong>5. Creative Format Preference</strong>
+            </label>
+            <div className="format-options-grid">
               <button
-                key={g.id}
                 type="button"
-                className={`goal-pill ${strategyGoal === g.id ? 'selected' : ''}`}
-                onClick={() => setStrategyGoal(g.id)}
+                className={`format-card-btn ${strategyFormat === 'both' ? 'selected' : ''}`}
+                onClick={() => setStrategyFormat('both')}
               >
-                <span>{g.label}</span>
+                <span className="format-icon">✨</span>
+                <div className="format-info">
+                  <strong>Both (Static + 30s Script)</strong>
+                  <span>Canva/Gemini prompt AND 30s video screenplay in {currentLangMeta.label}</span>
+                </div>
               </button>
-            ))}
+              <button
+                type="button"
+                className={`format-card-btn ${strategyFormat === 'short-video' ? 'selected' : ''}`}
+                onClick={() => setStrategyFormat('short-video')}
+              >
+                <span className="format-icon">🎬</span>
+                <div className="format-info">
+                  <strong>Short-Video Script</strong>
+                  <span>30s direct-response screenplay in {currentLangMeta.label} (Hook, Tension, Proof, CTA)</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={`format-card-btn ${strategyFormat === 'static' ? 'selected' : ''}`}
+                onClick={() => setStrategyFormat('static')}
+              >
+                <span className="format-icon">🖼️</span>
+                <div className="format-info">
+                  <strong>Static Ad Prompt</strong>
+                  <span>Copy-pasteable Canva/Gemini image prompt & 2 headline variants</span>
+                </div>
+              </button>
+            </div>
           </div>
-          {strategyGoal === 'custom' && (
-            <input
-              type="text"
-              className="url-field custom-goal-input"
-              placeholder="Enter your custom conversion goal / CTA..."
-              value={strategyCustomGoal}
-              onChange={(e) => setStrategyCustomGoal(e.target.value)}
-              autoFocus
-            />
-          )}
-        </div>
 
-        <div className="form-group">
-          <label className="input-label">
-            <strong>4. Creative Format Preference</strong>
-          </label>
-          <div className="format-options-grid">
+          {strategyError && <div className="error-toast">{strategyError}</div>}
+
+          {/* Action Buttons: Discovery vs Instant */}
+          <div className="setup-actions-row">
             <button
               type="button"
-              className={`format-card-btn ${strategyFormat === 'both' ? 'selected' : ''}`}
-              onClick={() => setStrategyFormat('both')}
+              className="btn-primary btn-run-pipeline btn-discover-gaps"
+              onClick={handleDiscoverGaps}
+              disabled={gapsLoading || strategyLoading}
             >
-              <span className="format-icon">✨</span>
-              <div className="format-info">
-                <strong>Both (Static + 30s Script)</strong>
-                <span>Canva/Midjourney prompt AND 30s Tarantino/Wilder video screenplay</span>
-              </div>
+              {gapsLoading ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Researching Market Gaps on Reddit & Forums...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔍 Step 1: Discover Market Gaps & Pain Points ➡️</span>
+                </>
+              )}
             </button>
+
             <button
               type="button"
-              className={`format-card-btn ${strategyFormat === 'short-video' ? 'selected' : ''}`}
-              onClick={() => setStrategyFormat('short-video')}
+              className="btn-secondary btn-instant-pipeline"
+              onClick={handleRunInstantPipeline}
+              disabled={strategyLoading || gapsLoading}
+              title="Skip manual gap selection and run all 4 stages automatically"
             >
-              <span className="format-icon">🎬</span>
-              <div className="format-info">
-                <strong>Short-Video Script</strong>
-                <span>30s direct-response screenplay (Hook, Tension, 3 Proof beats, Objection, CTA)</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              className={`format-card-btn ${strategyFormat === 'static' ? 'selected' : ''}`}
-              onClick={() => setStrategyFormat('static')}
-            >
-              <span className="format-icon">🖼️</span>
-              <div className="format-info">
-                <strong>Static Ad Prompt</strong>
-                <span>Copy-pasteable Canva/Gemini image prompt & 2 headline variants</span>
-              </div>
+              ⚡ Instant Full Strategy (Auto-Pick)
             </button>
           </div>
-        </div>
+          <p className="setup-flow-hint">
+            💡 <strong>Recommended:</strong> Click <em>"Step 1: Discover Market Gaps"</em> to review actual customer complaints, choose your preferred pain point, or ask for more pain points before generating the Hormozi offer and script.
+          </p>
+        </section>
+      )}
 
-        {strategyError && <div className="error-toast">{strategyError}</div>}
+      {/* ---------------------------------------------------------------------
+          PHASE 2: INTERACTIVE MARKET GAPS & PAIN POINTS SELECTION
+      --------------------------------------------------------------------- */}
+      {currentPhase === 'gaps' && (
+        <section className="card gaps-phase-card">
+          <div className="gaps-phase-header">
+            <div className="gaps-header-meta">
+              <button
+                type="button"
+                className="btn-back-setup"
+                onClick={() => setCurrentPhase('setup')}
+              >
+                ← Edit Topic
+              </button>
+              <div className="gaps-title-wrap">
+                <span className="gaps-step-pill">Stage 1 of 4 • Human-in-the-Loop Selection</span>
+                <h3 className="gaps-section-title">Select Customer Gap & Pain Point</h3>
+                <p className="gaps-section-subtitle">
+                  The agent scoured Reddit, forums, Google reviews, and TikTok discussions for <strong>"{strategyNiche}"</strong>.
+                  Select the gap you want to build your ad around. <em>Only after selecting will it proceed to the Hormozi offer & creative scripts.</em>
+                </p>
+              </div>
+            </div>
 
-        <button
-          type="button"
-          className="btn-primary btn-run-pipeline"
-          onClick={handleRunPipeline}
-          disabled={strategyLoading}
-        >
-          {strategyLoading ? (
-            <>
-              <span className="spinner"></span>
-              <span>Executing 4-Stage Ad Strategy Pipeline...</span>
-            </>
-          ) : (
-            <>
-              <span>🚀 Run 4-Stage Ad Strategy Pipeline</span>
-            </>
+            <div className="gaps-header-badges">
+              <span className="header-meta-pill">🗣️ Script Lang: {currentLangMeta.label}</span>
+              <span className="header-meta-pill">🎯 Goal: {strategyGoal === 'custom' ? strategyCustomGoal : strategyGoal}</span>
+            </div>
+          </div>
+
+          {/* AI Recommendation Highlight Box */}
+          {aiRecommendation && aiRecommendation.reason && (
+            <div className="gaps-ai-recommendation-box">
+              <div className="ai-rec-header">
+                <span className="ai-rec-star">⭐</span>
+                <strong>AI Market Analysis Recommendation:</strong>
+              </div>
+              <p className="ai-rec-text">{aiRecommendation.reason}</p>
+            </div>
           )}
-        </button>
-      </section>
 
+          {strategyError && <div className="error-toast">{strategyError}</div>}
+
+          {/* Loading State during initial gap fetch */}
+          {gapsLoading && (
+            <div className="gaps-loading-state">
+              <span className="spinner large-spinner"></span>
+              <h4>Scouring Reddit, TikTok & Industry Forums...</h4>
+              <p>Extracting raw customer emotional frustrations, recurring complaints, and underserved angles.</p>
+            </div>
+          )}
+
+          {/* Interactive Gap Cards Grid */}
+          {!gapsLoading && gapsList.length > 0 && (
+            <div className="gaps-cards-grid">
+              {gapsList.map((gap, idx) => {
+                const isSelected = selectedGapId === gap.id;
+                const isRecommended = aiRecommendation && aiRecommendation.id === gap.id;
+                return (
+                  <div
+                    key={gap.id || idx}
+                    className={`gap-choice-card ${isSelected ? 'selected' : ''} ${isRecommended ? 'recommended-card' : ''}`}
+                    onClick={() => setSelectedGapId(gap.id)}
+                  >
+                    <div className="gap-card-top">
+                      <div className="gap-radio-wrap">
+                        <div className={`gap-radio-circle ${isSelected ? 'checked' : ''}`}>
+                          {isSelected && <span className="gap-radio-dot"></span>}
+                        </div>
+                        <span className="gap-rank-tag">#{gap.frequency_rank || idx + 1} Frequency</span>
+                      </div>
+
+                      <div className="gap-badges-right">
+                        {isRecommended && <span className="gap-ai-pick-pill">⭐ AI Recommended</span>}
+                        {renderIntensityBadge(gap.intensity)}
+                        {gap.isNewBatch && <span className="gap-new-pill">✨ Fresh Angle</span>}
+                      </div>
+                    </div>
+
+                    <h4 className="gap-card-title">{gap.title}</h4>
+
+                    {/* Customer Voice Callout */}
+                    <div className="gap-statement-callout">
+                      <span className="callout-quote-icon">“</span>
+                      <p className="callout-text">{gap.gap_statement}</p>
+                    </div>
+
+                    {/* Why it matters */}
+                    {gap.why_it_matters && (
+                      <div className="gap-why-matters">
+                        <strong>📌 Why it costs them:</strong> {gap.why_it_matters}
+                      </div>
+                    )}
+
+                    {/* Direct customer quotes */}
+                    {gap.quotes && Array.isArray(gap.quotes) && gap.quotes.length > 0 && (
+                      <div className="gap-quotes-container">
+                        <span className="quotes-label">Real User Voice:</span>
+                        {gap.quotes.map((q, qIdx) => {
+                          const quoteText = typeof q === 'string' ? q : q.quote;
+                          const quoteSource = typeof q === 'object' && q.source ? q.source : 'Discussion Forum';
+                          return (
+                            <div key={qIdx} className="gap-quote-bubble">
+                              <p className="bubble-text">"{quoteText}"</p>
+                              <span className="bubble-source">— {quoteSource}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="gap-card-footer">
+                      <button
+                        type="button"
+                        className={`btn-select-gap ${isSelected ? 'active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedGapId(gap.id);
+                        }}
+                      >
+                        {isSelected ? '✓ Selected for Next Stage' : 'Select This Gap'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Option to write a custom or refined pain point */}
+              <div
+                className={`gap-choice-card custom-gap-card ${selectedGapId === 'custom' ? 'selected' : ''}`}
+                onClick={() => setSelectedGapId('custom')}
+              >
+                <div className="gap-card-top">
+                  <div className="gap-radio-wrap">
+                    <div className={`gap-radio-circle ${selectedGapId === 'custom' ? 'checked' : ''}`}>
+                      {selectedGapId === 'custom' && <span className="gap-radio-dot"></span>}
+                    </div>
+                    <span className="gap-rank-tag">✏️ Custom Angle</span>
+                  </div>
+                  <span className="gap-intensity-pill intensity-custom">User Defined</span>
+                </div>
+
+                <h4 className="gap-card-title">Write or Refine Your Own Customer Pain Point</h4>
+                <p className="custom-gap-desc">
+                  Have a specific insider frustration or proprietary angle? Enter it here and the agent will build the Hormozi offer and {currentLangMeta.label} script around it.
+                </p>
+
+                {selectedGapId === 'custom' && (
+                  <div className="custom-gap-input-wrap" onClick={(e) => e.stopPropagation()}>
+                    <textarea
+                      className="strategy-textarea custom-gap-textarea"
+                      rows={3}
+                      placeholder="e.g. Traditional ERPs take 6 months to implement and cost ₹5 Lakhs upfront, while 90% of our inventory features sit unused..."
+                      value={customGapText}
+                      onChange={(e) => setCustomGapText(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                <div className="gap-card-footer">
+                  <button
+                    type="button"
+                    className={`btn-select-gap ${selectedGapId === 'custom' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedGapId('custom');
+                    }}
+                  >
+                    {selectedGapId === 'custom' ? '✓ Custom Gap Selected' : 'Use Custom Gap'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------
+              ACTIONS TOOLBAR (Find More Pain Points + Proceed Gate)
+          --------------------------------------------------------------- */}
+          <div className="gaps-actions-toolbar">
+            <div className="toolbar-left">
+              <button
+                type="button"
+                className="btn-secondary btn-more-gaps"
+                onClick={handleFindMoreGaps}
+                disabled={moreGapsLoading || gapsLoading}
+              >
+                {moreGapsLoading ? (
+                  <>
+                    <span className="spinner"></span>
+                    <span>Digging Deeper for Fresh Pain Points...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🔄 Not Satisfied? Find 5 More Pain Points & Gaps</span>
+                  </>
+                )}
+              </button>
+              <span className="toolbar-helper-note">
+                Excludes already discovered angles and searches fresh subreddits & forums.
+              </span>
+            </div>
+
+            <div className="toolbar-right">
+              <button
+                type="button"
+                className={`btn-primary btn-proceed-stage ${!isGapSelected ? 'disabled-gate' : ''}`}
+                onClick={handleRunPipelineWithSelectedGap}
+                disabled={!isGapSelected || strategyLoading}
+              >
+                {strategyLoading ? (
+                  <>
+                    <span className="spinner"></span>
+                    <span>Engineering Offer & Scripts...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀 Proceed to Stages 2–4 with Selected Gap ➡️</span>
+                  </>
+                )}
+              </button>
+              {!isGapSelected && (
+                <span className="gate-locked-hint">
+                  🔒 Please select a customer gap card above to unlock the next stages.
+                </span>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ---------------------------------------------------------------------
+          LIVE PROGRESS MODAL / CARD DURING PIPELINE EXECUTION
+      --------------------------------------------------------------------- */}
       {strategyLoading && (
         <div className="pipeline-progress-card">
           <div className="progress-header">
@@ -945,25 +1575,27 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
             <span className="progress-status-pill">Active Live Run</span>
           </div>
           <div className="pipeline-steps">
-            <div className={`pipeline-step ${strategyStageIndex >= 1 ? 'active' : ''} ${strategyStageIndex > 1 ? 'completed' : ''}`}>
-              <div className="step-circle">{strategyStageIndex > 1 ? '✓' : '1'}</div>
+            <div className="pipeline-step completed">
+              <div className="step-circle">✓</div>
               <div className="step-body">
-                <strong>Stage 1: Cross-Platform Gap Research</strong>
-                <span>Scouring Reddit, Google reviews, forums, and TikTok comments for customer complaints</span>
+                <strong>Stage 1: Customer Gap Selected</strong>
+                <span>
+                  {selectedGapId === 'custom' ? customGapText.slice(0, 80) : (gapsList.find((g) => g.id === selectedGapId)?.title || 'Market gap chosen')}
+                </span>
               </div>
             </div>
             <div className={`pipeline-step ${strategyStageIndex >= 2 ? 'active' : ''} ${strategyStageIndex > 2 ? 'completed' : ''}`}>
               <div className="step-circle">{strategyStageIndex > 2 ? '✓' : '2'}</div>
               <div className="step-body">
-                <strong>Stage 2: ICP & Hormozi Offer Engineering</strong>
-                <span>Avatar triggers, segmentation, and calculating Dream Outcome / Time & Effort equation</span>
+                <strong>Stage 2: ICP & Alex Hormozi Offer Engineering</strong>
+                <span>Avatar triggers, sub-segments, and calculating Value Equation around selected gap</span>
               </div>
             </div>
             <div className={`pipeline-step ${strategyStageIndex >= 3 ? 'active' : ''} ${strategyStageIndex > 3 ? 'completed' : ''}`}>
               <div className="step-circle">{strategyStageIndex > 3 ? '✓' : '3'}</div>
               <div className="step-body">
-                <strong>Stage 3: Direct-Response Creative Output</strong>
-                <span>Generating copy-pasteable image prompts and 30s Tarantino/Wilder screenplay</span>
+                <strong>Stage 3: Direct-Response Creative Output ({currentLangMeta.label})</strong>
+                <span>Writing copy-pasteable image prompts and 30s video screenplay in authentic {currentLangMeta.label}</span>
               </div>
             </div>
             <div className={`pipeline-step ${strategyStageIndex >= 4 ? 'active' : ''}`}>
@@ -977,13 +1609,26 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
         </div>
       )}
 
-      {strategyResult && !strategyLoading && (
+      {/* ---------------------------------------------------------------------
+          PHASE 3: STRATEGY RESULTS & CREATIVE SCRIPTS
+      --------------------------------------------------------------------- */}
+      {currentPhase === 'strategy' && strategyResult && !strategyLoading && (
         <div className="strategy-results-card">
           <div className="strategy-results-header">
             <div className="results-title-group">
-              <span className="strategy-topic-tag">Ad Strategy Plan</span>
+              <span className="strategy-topic-tag">Complete 4-Stage Strategy</span>
               <h3 className="results-niche-title">{strategyMeta?.niche || strategyNiche}</h3>
+
+              {/* Selected Gap Banner Callout */}
+              {strategyMeta?.selectedGap && (
+                <div className="results-gap-banner">
+                  <span className="gap-banner-label">🎯 Targeted Gap:</span>
+                  <span className="gap-banner-content">{strategyMeta.selectedGap}</span>
+                </div>
+              )}
+
               <div className="strategy-meta-tags">
+                <span className="meta-tag">🗣️ Script: <strong>{currentLangMeta.label}</strong></span>
                 <span className="meta-tag">📱 {strategyMeta?.platforms || strategyPlatforms.join(', ')}</span>
                 <span className="meta-tag">🎯 {strategyMeta?.goal || strategyGoal}</span>
                 <span className="meta-tag">🎨 Format: {strategyMeta?.format || strategyFormat}</span>
@@ -992,6 +1637,19 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
             </div>
 
             <div className="results-action-buttons">
+              {gapsList.length > 0 && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm btn-back-gaps-action"
+                  onClick={() => {
+                    setCurrentPhase('gaps');
+                    window.scrollTo({ top: 120, behavior: 'smooth' });
+                  }}
+                  title="Pick a different pain point from the list"
+                >
+                  ← Change Gap
+                </button>
+              )}
               <button
                 type="button"
                 className="btn-secondary btn-action-sm"
@@ -999,6 +1657,15 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
               >
                 📋 Copy Full Plan
               </button>
+              {hasScript && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyScript}
+                >
+                  🎬 Copy 30s Script ({currentLangMeta.badge})
+                </button>
+              )}
               {hasPrompt && (
                 <button
                   type="button"
@@ -1006,15 +1673,6 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
                   onClick={handleCopyPrompt}
                 >
                   🎨 Copy Image Prompt
-                </button>
-              )}
-              {hasScript && (
-                <button
-                  type="button"
-                  className="btn-secondary btn-action-sm"
-                  onClick={handleCopyScript}
-                >
-                  🎬 Copy 30s Script
                 </button>
               )}
               <button
@@ -1028,6 +1686,7 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
                 type="button"
                 className="btn-primary btn-action-sm"
                 onClick={() => {
+                  setCurrentPhase('setup');
                   setStrategyResult('');
                   window.scrollTo({ top: 120, behavior: 'smooth' });
                 }}
@@ -1037,13 +1696,14 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
             </div>
           </div>
 
+          {/* Stage Filter Tabs */}
           <div className="stage-filter-tabs">
             {[
               { id: 'all', label: '📋 All 4 Stages' },
               { id: 'summary', label: '⚡ Executive Summary' },
               { id: 'stage1', label: '🔍 1. Gap Research' },
               { id: 'stage2', label: '💡 2. Hormozi Offer' },
-              { id: 'stage3', label: '🎨 3. Creative Output' },
+              { id: 'stage3', label: `🎨 3. Creative (${currentLangMeta.badge})` },
               { id: 'stage4', label: '📊 4. Campaign & Budget' },
             ].map((tab) => (
               <button
@@ -1067,6 +1727,9 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
         </div>
       )}
 
+      {/* ---------------------------------------------------------------------
+          SAVED STRATEGY HISTORY SECTION
+      --------------------------------------------------------------------- */}
       {strategyHistory.length > 0 && (
         <section className="card strategy-history-card">
           <div className="history-header">
@@ -1093,7 +1756,13 @@ function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModa
                   </button>
                 </div>
                 <h5 className="history-item-niche">{item.niche}</h5>
+                {item.selectedGapTitle && (
+                  <span className="history-gap-title">🎯 {item.selectedGapTitle}</span>
+                )}
                 <div className="history-item-badges">
+                  {item.scriptLanguage && (
+                    <span className="badge-sm lang-badge">🗣️ {item.scriptLanguage.toUpperCase()}</span>
+                  )}
                   <span className="badge-sm">{item.platforms}</span>
                   <span className="badge-sm">{item.goal}</span>
                 </div>

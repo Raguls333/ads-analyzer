@@ -155,6 +155,40 @@ recommended starting budget — so the user can execute without re-reading
 everything."""
 
 
+GAPS_RESEARCH_SYSTEM_INSTRUCTION = """You are a direct-response market research specialist discovering real customer gaps & pain points.
+Given a niche, product, or service, search Reddit, Facebook groups, Google reviews/forums, niche blogs, and TikTok comments for real discussions.
+Pull direct emotional language people use when they complain, ask questions, or express frustration about existing solutions.
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "recommended_gap_id": "gap_1",
+  "recommended_reason": "One-sentence explanation of why this gap is most underserved and highest-converting.",
+  "gaps": [
+    {
+      "id": "gap_1",
+      "title": "Short punchy title of the frustration/gap",
+      "gap_statement": "A one-line statement written in the customer's own first-person emotional words",
+      "intensity": "High" | "Very High" | "Extreme",
+      "frequency_rank": 1,
+      "why_it_matters": "Why this problem costs them money, time, or emotional peace",
+      "quotes": [
+        {
+          "quote": "Direct or paraphrased representative quote from real discussions",
+          "source": "Reddit / TikTok / Google Reviews / Forum"
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+1. Return 5 distinct, recurring gaps ranked by emotional intensity and frequency.
+2. Prioritize recency (last 12 months) and specificity over generic complaints.
+3. Every quote must sound like a real human expressing raw frustration.
+4. Output ONLY valid JSON, no surrounding commentary or markdown fences.
+"""
+
+
 class AdAnalyzerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Serve static files from ui/dist if it exists, otherwise current dir
@@ -287,6 +321,77 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 self._send_json(500, {"error": f"Failed running benchmark research: {err_str}", "details": err_str})
                 return
 
+        if parsed.path == "/api/strategy-agent/gaps":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            niche = payload.get("niche", "").strip()
+            if not niche:
+                self._send_json(400, {"error": "Niche, product, or service topic is required."})
+                return
+
+            platforms = payload.get("platforms", "Instagram, Facebook")
+            exclude_gaps = payload.get("excludeGaps", [])
+
+            user_msg = (
+                f"NICHE / PRODUCT / SERVICE: {niche}\n"
+                f"TARGET PLATFORMS: {platforms}\n"
+            )
+            if exclude_gaps and isinstance(exclude_gaps, list) and len(exclude_gaps) > 0:
+                avoid_list = "; ".join([f'"{str(g)}"' for g in exclude_gaps if g])
+                user_msg += (
+                    f"\nCRITICAL: The user was not fully satisfied with previous angles. "
+                    f"Do NOT repeat any of these previously found gaps or pain points:\n[{avoid_list}]\n"
+                    f"Dig deeper into different subreddits, forums, TikTok comments, and niche reviews to uncover 5 brand new, distinct, high-intensity pain points and gaps."
+                )
+
+            try:
+                client = genai.Client(api_key=api_key)
+                raw_text = None
+                used_model = None
+
+                try:
+                    search_tool = types.Tool(google_search=types.GoogleSearch())
+                    config_with_search = types.GenerateContentConfig(
+                        system_instruction=GAPS_RESEARCH_SYSTEM_INSTRUCTION,
+                        tools=[search_tool],
+                        response_mime_type="application/json",
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_msg], config_with_search)
+                except Exception as e_search:
+                    print(f"Search grounding unavailable for gaps ({e_search}). Retrying with direct config ...")
+                    config_direct = types.GenerateContentConfig(
+                        system_instruction=GAPS_RESEARCH_SYSTEM_INSTRUCTION,
+                        response_mime_type="application/json",
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_msg], config_direct)
+
+                parsed_data = ad_analyzer.extract_json(raw_text)
+                self._send_json(200, {
+                    "success": True,
+                    "data": parsed_data,
+                    "model": used_model,
+                    "niche": niche,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed researching gaps: {err_str}", "details": err_str})
+                return
+
         if parsed.path == "/api/strategy-agent":
             content_length = int(self.headers.get("Content-Length", 0))
             post_body = self.rfile.read(content_length)
@@ -312,14 +417,57 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             platforms = payload.get("platforms", "Instagram, Facebook")
             goal = payload.get("goal", "Book Free Demo / Consultation")
             format_pref = payload.get("formatPreference", "both")
+            selected_gap = payload.get("selectedGap", "").strip()
+            script_lang = payload.get("scriptLanguage", "english").lower().strip()
+
+            lang_instructions = {
+                "tamil": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION (STAGE 3 SHORT-VIDEO SCRIPT):\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in authentic, natural spoken TAMIL (தமிழ்).\n"
+                    "- Do NOT use stiff textbook/literary Tamil. It must sound conversational, exactly like a native Tamil content creator speaking passionately to their audience.\n"
+                    "- Visual scene directions, text overlays, and shot types can remain in English for the production crew, but the SPOKEN DIALOGUE lines must be in Tamil (தமிழ்)."
+                ),
+                "tanglish": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION (STAGE 3 SHORT-VIDEO SCRIPT):\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in colloquial TANGLISH (Tamil words transliterated into English/Latin script, the predominant conversational format for South Indian Instagram Reels & YouTube Shorts ads).\n"
+                    "- Example style: 'Neenga innum manual-ah Excel-la data enter panreengala? Daily 2 hours waste aagudha? Stop panunga! Orey click-la invoice generate pannunga...'\n"
+                    "- It must sound 100% natural, energetic, and relatable like an authentic South Indian creator speaking to a friend, avoiding formal corporate language."
+                ),
+                "hinglish": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION (STAGE 3 SHORT-VIDEO SCRIPT):\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in conversational HINGLISH (Hindi spoken dialogue written in Roman/English alphabet, widely used in Indian D2C & social ads).\n"
+                    "- Example style: 'Kya aap bhi har roz client follow-ups se pareshan ho? Daily 4 ghante waste ho rahe hain? Stop doing this manually...'"
+                ),
+                "hindi": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION (STAGE 3 SHORT-VIDEO SCRIPT):\n"
+                    "- Write the spoken dialogue lines of the 30-second video script in spoken HINDI (हिंदी), punchy and conversational for social media reels."
+                ),
+                "english": (
+                    "CRITICAL SCRIPT LANGUAGE INSTRUCTION (STAGE 3 SHORT-VIDEO SCRIPT):\n"
+                    "- Write the spoken dialogue lines in punchy, direct-response English with tension and economical dialogue (Tarantino/Wilder style)."
+                ),
+            }
+            lang_prompt = lang_instructions.get(script_lang, lang_instructions["english"])
+
+            gap_prompt = ""
+            if selected_gap:
+                gap_prompt = (
+                    f"\nCRITICAL: USER HAS REVIEWED STAGE 1 MARKET GAPS AND EXPLICITLY CHOSEN THIS SPECIFIC GAP:\n"
+                    f">>> \"{selected_gap}\"\n"
+                    f"Engineer Stage 2 (Alex Hormozi Offer & Value Equation) and Stage 3 (Creative Visuals & Video Script) specifically around THIS selected gap as the core hook and problem!\n"
+                )
 
             user_message = (
                 f"INPUT PROVIDED BY USER:\n"
                 f"- Niche / product / service: {niche}\n"
                 f"- Platform(s) to advertise on: {platforms}\n"
                 f"- Primary CTA / conversion goal: {goal}\n"
-                f"- Creative format preference: {format_pref}\n\n"
-                f"Execute the full 4-stage research-to-creative pipeline now without skipping any stage. "
+                f"- Creative format preference: {format_pref}\n"
+                f"- Script Language: {script_lang.upper()}\n"
+                f"{gap_prompt}\n"
+                f"{lang_prompt}\n\n"
+                f"Execute the 4-stage research-to-creative pipeline now without skipping any stage. "
+                f"If a specific gap was selected above, carry it forward into the Hormozi offer and creative output. "
                 f"Ground your market research in real discussions and language from Reddit, forums, TikTok, and reviews. "
                 f"Follow all instructions and output formats strictly."
             )
