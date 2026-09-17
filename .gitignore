@@ -1,0 +1,23 @@
+# Secrets & Environment
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Node & UI
+node_modules/
+ui/node_modules/
+.npm
+npm-debug.log*
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
