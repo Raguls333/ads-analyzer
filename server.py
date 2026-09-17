@@ -43,6 +43,118 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIST_DIR = os.path.join(SCRIPT_DIR, "ui", "dist")
 
 
+STRATEGY_AGENT_SYSTEM_INSTRUCTION = """You are an Ad Strategy Agent. Given a niche, product, or service, you run a
+4-stage research-to-creative pipeline and return a complete, ready-to-execute
+ad strategy. Do not skip stages. Do not ask the user for information you can
+find yourself via search — only ask if the input is too vague to search at all.
+
+INPUT REQUIRED FROM USER:
+- Niche / product / service
+- Platform(s) to advertise on (Instagram, Facebook, TikTok, etc.)
+- Primary CTA / conversion goal (call, purchase, trial, download)
+- (Optional) creative format preference: static/design or short-video script
+
+=====================================================
+STAGE 1 — CROSS-PLATFORM GAP RESEARCH
+=====================================================
+Search Reddit, Facebook groups, Google (reviews/forums/Q&A), niche blogs, and
+TikTok comments for real discussions about the given niche. Pull direct
+language people use when they complain, ask questions, or express frustration
+about existing solutions.
+
+Return:
+1. Top 5 recurring gaps/frustrations, ranked by frequency and emotional intensity
+2. For each: 2-3 representative quotes (paraphrased if needed), source platform,
+   and why it matters to this audience
+3. Which single gap is most underserved by current market leaders
+4. A one-line "gap statement" per gap, written in the customer's own words
+
+Prioritize recency (last 12 months) and specificity over generic complaints.
+Present all 5, then select the highest-priority gap to carry forward — state
+your reasoning for the pick in one sentence, but let the user override it.
+
+=====================================================
+STAGE 2 — ICP, SEGMENTATION & OFFER ENGINEERING
+=====================================================
+Using the selected gap, act as Alex Hormozi and build:
+
+1. IDEAL CUSTOMER AVATAR
+   - Demographics, current situation, previously failed solutions
+   - The exact trigger moment that starts their search for a solution
+   - Their underlying fear (behind the stated problem)
+   - Their actual desired outcome (not the feature — the transformation)
+
+2. AUDIENCE SEGMENTATION
+   - 2-3 sub-segments within this ICA (by awareness level, urgency, or budget)
+   - Which segment to target first, and why
+
+3. OFFER ENGINEERING (Value Equation: Dream Outcome x Perceived Likelihood of
+   Success / Time Delay x Effort & Sacrifice)
+   - Core offer definition
+   - Dream outcome in the customer's own words
+   - 3 levers to increase perceived likelihood (guarantees, proof, transparency)
+   - 3 levers to reduce time delay (fast wins, milestones)
+   - 3 levers to reduce effort/sacrifice (done-for-you elements, simplicity)
+   - Value-adding bonus stack
+   - Risk reversal / guarantee structure
+   - Final one-sentence irresistible offer statement
+
+Be direct about weak points in the offer. Do not soften — the offer must be
+genuinely hard to refuse.
+
+=====================================================
+STAGE 3 — CREATIVE OUTPUT (branch by format)
+=====================================================
+If format = static/design:
+  Act as a direct-response creative director. Generate a Canva/Gemini
+  image-generation prompt that:
+  - Visually represents the "before" frustration or "after" transformation
+    (produce both options)
+  - Uses proof elements as visual anchors, not just text
+  - Matches native platform content style (not corporate/stock-photo)
+  - Includes exact copy overlay text (headline, subhead, CTA), mobile-sized
+  - Specifies color psychology and composition for the offer's positioning
+  Output as one copy-pasteable prompt block, plus 2 alternate headline variants.
+
+If format = short-video:
+  Act as a short-form direct-response scriptwriter with Tarantino's sense of
+  tension/pacing and Billy Wilder's economical, sharp dialogue, disciplined by
+  direct-response principles (every line earns its place toward the CTA).
+  Write a 30-second script:
+  1. HOOK (0-3s): tension/curiosity line in the customer's own vernacular
+  2. TENSION (3-6s): the stat/contrast that raises stakes
+  3. PROOF (6-20s): 3 beats, each a visual + one spoken line, showing not
+     claiming transformation
+  4. OBJECTION HANDLE (20-25s): pre-empt the single biggest purchase hesitation
+  5. CTA (25-30s): one action, urgent but not desperate
+  For each beat specify: spoken line, visual direction, on-screen text overlay,
+  shot type. Write it shootable by a solo creator on a phone — no production
+  budget required. Language must sound spoken, not written.
+
+If format is unspecified, generate both.
+
+=====================================================
+STAGE 4 — CAMPAIGN STRUCTURE & BUDGET
+=====================================================
+Recommend, based on the CTA and awareness level established above:
+- Meta campaign objective (Leads / Conversions / Traffic) and why
+- Funnel structure (single-stage cold vs TOF/retargeting split) and why
+- Ad set structure: CBO vs ABO, number of ad sets, creatives per ad set,
+  broad vs interest targeting
+- Testing budget: daily spend per creative batch, number of hook variants to
+  test (3-4), minimum run length before declaring a winner (7 days minimum)
+- Scaling cadence once a winner is found (20-30% increases every 3 days)
+- Any Meta ad policy considerations relevant to this niche
+
+=====================================================
+OUTPUT FORMAT
+=====================================================
+Return all 4 stages in order, clearly headed. End with a one-paragraph
+executive summary: the gap chosen, the offer, the creative format, and the
+recommended starting budget — so the user can execute without re-reading
+everything."""
+
+
 class AdAnalyzerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Serve static files from ui/dist if it exists, otherwise current dir
@@ -173,6 +285,78 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 err_str = str(e)
                 self._send_json(500, {"error": f"Failed running benchmark research: {err_str}", "details": err_str})
+                return
+
+        if parsed.path == "/api/strategy-agent":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            niche = payload.get("niche", "").strip()
+            if not niche:
+                self._send_json(400, {"error": "Niche, product, or service topic is required."})
+                return
+
+            platforms = payload.get("platforms", "Instagram, Facebook")
+            goal = payload.get("goal", "Book Free Demo / Consultation")
+            format_pref = payload.get("formatPreference", "both")
+
+            user_message = (
+                f"INPUT PROVIDED BY USER:\n"
+                f"- Niche / product / service: {niche}\n"
+                f"- Platform(s) to advertise on: {platforms}\n"
+                f"- Primary CTA / conversion goal: {goal}\n"
+                f"- Creative format preference: {format_pref}\n\n"
+                f"Execute the full 4-stage research-to-creative pipeline now without skipping any stage. "
+                f"Ground your market research in real discussions and language from Reddit, forums, TikTok, and reviews. "
+                f"Follow all instructions and output formats strictly."
+            )
+
+            try:
+                client = genai.Client(api_key=api_key)
+
+                # Attempt with Google Search grounding tool for real-time web intelligence
+                raw_text = None
+                used_model = None
+                try:
+                    search_tool = types.Tool(google_search=types.GoogleSearch())
+                    config_with_search = types.GenerateContentConfig(
+                        system_instruction=STRATEGY_AGENT_SYSTEM_INSTRUCTION,
+                        tools=[search_tool],
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_message], config_with_search)
+                except Exception as e_search:
+                    print(f"Search grounding unavailable or errored ({e_search}). Retrying with direct reasoning fallback ...")
+                    config_direct = types.GenerateContentConfig(
+                        system_instruction=STRATEGY_AGENT_SYSTEM_INSTRUCTION,
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_message], config_direct)
+
+                self._send_json(200, {
+                    "success": True,
+                    "result": raw_text,
+                    "model": used_model,
+                    "niche": niche,
+                    "platforms": platforms,
+                    "goal": goal,
+                    "formatPreference": format_pref,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed executing Ad Strategy Agent pipeline: {err_str}", "details": err_str})
                 return
 
         if parsed.path != "/api/analyze":

@@ -285,9 +285,837 @@ function PasscodeGate({ onUnlock }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Ad Strategy Agent Constants & Helpers
+// ---------------------------------------------------------------------------
+const AVAILABLE_PLATFORMS = ['Instagram', 'Facebook', 'TikTok', 'YouTube', 'LinkedIn'];
+
+const PRESET_GOALS = [
+  { id: 'Book Free Demo / Consultation Call', label: '📞 Book Free Demo / Call' },
+  { id: 'Direct E-Commerce Purchase', label: '🛒 Direct Purchase' },
+  { id: 'Free Trial / App Install', label: '📱 Free Trial / App' },
+  { id: 'Lead Form / Instant Quote', label: '📝 Lead Form / Quote' },
+  { id: 'Send WhatsApp / Direct Message', label: '💬 WhatsApp / DM' },
+  { id: 'custom', label: '✏️ Custom CTA...' },
+];
+
+const SAMPLE_NICHES = [
+  {
+    label: '🏢 B2B SaaS for Indian Manufacturers',
+    niche: 'B2B SaaS lead-gen campaign targeting Indian manufacturing unit owners with ERP/inventory automation',
+    platforms: ['Facebook', 'LinkedIn', 'Instagram'],
+    goal: 'Book Free Demo / Consultation Call',
+    format: 'both',
+  },
+  {
+    label: '❄️ Cold Plunge Tubs for Athletes',
+    niche: 'High-end cold plunge ice bath tubs for home recovery, biohackers & CrossFit athletes',
+    platforms: ['Instagram', 'TikTok', 'Facebook'],
+    goal: 'Direct E-Commerce Purchase',
+    format: 'both',
+  },
+  {
+    label: '🦷 Invisalign / Dental Aligners',
+    niche: 'Invisalign and invisible teeth aligners for young professionals and brides-to-be',
+    platforms: ['Instagram', 'Facebook'],
+    goal: 'Book Free Demo / Consultation Call',
+    format: 'short-video',
+  },
+  {
+    label: '👗 Eco-Friendly Activewear',
+    niche: 'Sustainable recycled gym & yoga activewear for women wanting squat-proof comfort',
+    platforms: ['Instagram', 'TikTok'],
+    goal: 'Direct E-Commerce Purchase',
+    format: 'static',
+  },
+  {
+    label: '🏡 Real Estate Investor Mastermind',
+    niche: 'High-ticket real estate investing mentorship & off-market deal acquisition software',
+    platforms: ['Facebook', 'Instagram', 'YouTube'],
+    goal: 'Book Free Demo / Consultation Call',
+    format: 'both',
+  },
+];
+
+function renderInlineMarkdown(text) {
+  if (!text) return '';
+  const parts = [];
+  const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(<strong key={match.index}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      parts.push(<code key={match.index} className="inline-code">{token.slice(1, -1)}</code>);
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(<em key={match.index}>{token.slice(1, -1)}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+  return parts.length > 0 ? parts : text;
+}
+
+function extractStrategySnippet(text, type) {
+  if (!text) return '';
+  if (type === 'summary') {
+    const match = text.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    if (match) return match[0].replace(/^(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)\s*/i, '').trim();
+    return '';
+  }
+  if (type === 'prompt') {
+    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    const searchTarget = s3Match ? s3Match[0] : text;
+    const codeMatch = searchTarget.match(/```(?:text|markdown|prompt)?\s*([\s\S]*?)```/);
+    if (codeMatch) return codeMatch[1].trim();
+    const promptMatch = searchTarget.match(/(?:Prompt|prompt|Canva)[\s\S]*?(?:Headline variants|Short-video|$)/i);
+    if (promptMatch) return promptMatch[0].trim();
+    return '';
+  }
+  if (type === 'script') {
+    const s3Match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    const searchTarget = s3Match ? s3Match[0] : text;
+    const scriptMatch = searchTarget.match(/(?:HOOK\s*\(0-3s\)[\s\S]*?(?:STAGE\s*4|$))/i);
+    if (scriptMatch) return scriptMatch[0].trim();
+    return '';
+  }
+  return '';
+}
+
+function FormattedStrategyMarkdown({ content, filterStage, onCopy }) {
+  if (!content) return null;
+
+  let targetContent = content;
+  if (filterStage === 'summary') {
+    const match = content.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage1') {
+    const match = content.match(/(?:STAGE\s*1[\s\S]*?)(?:STAGE\s*2|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage2') {
+    const match = content.match(/(?:STAGE\s*2[\s\S]*?)(?:STAGE\s*3|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage3') {
+    const match = content.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage4') {
+    const match = content.match(/(?:STAGE\s*4[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    if (match) targetContent = match[0];
+  }
+
+  const lines = targetContent.split('\n');
+  const elements = [];
+  let inCodeBlock = false;
+  let codeBlockLines = [];
+  let codeBlockLang = '';
+  let inTable = false;
+  let tableRows = [];
+
+  const flushCode = (key) => {
+    if (codeBlockLines.length > 0) {
+      const codeText = codeBlockLines.join('\n');
+      elements.push(
+        <div key={key} className="strategy-code-box">
+          <div className="strategy-code-header">
+            <span className="code-lang-label">{codeBlockLang || 'Prompt / Screenplay / Code'}</span>
+            <button
+              type="button"
+              className="btn-copy-sm"
+              onClick={() => {
+                navigator.clipboard.writeText(codeText);
+                onCopy('Copied code block to clipboard!');
+              }}
+            >
+              📋 Copy
+            </button>
+          </div>
+          <pre className="strategy-code-pre">{codeText}</pre>
+        </div>
+      );
+      codeBlockLines = [];
+      codeBlockLang = '';
+    }
+  };
+
+  const flushTable = (key) => {
+    if (tableRows.length > 0) {
+      const headerRow = tableRows[0];
+      const dataRows = tableRows.slice(1).filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())));
+      elements.push(
+        <div key={key} className="strategy-table-scroll">
+          <table className="strategy-table">
+            <thead>
+              <tr>
+                {headerRow.map((cell, idx) => (
+                  <th key={idx}>{renderInlineMarkdown(cell.trim())}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx}>{renderInlineMarkdown(cell.trim())}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableRows = [];
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        flushCode(`code-${i}`);
+        inCodeBlock = false;
+      } else {
+        if (inTable) {
+          flushTable(`tbl-${i}`);
+          inTable = false;
+        }
+        inCodeBlock = true;
+        codeBlockLang = line.trim().replace(/^```/, '').trim();
+        codeBlockLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      const cells = line.trim().split('|').slice(1, -1);
+      if (cells.length > 0) {
+        inTable = true;
+        tableRows.push(cells);
+        continue;
+      }
+    } else if (inTable) {
+      flushTable(`tbl-${i}`);
+      inTable = false;
+    }
+
+    const trimmed = line.trim();
+
+    if (/^(=+|-{3,}|\*{3,})$/.test(trimmed)) {
+      elements.push(<hr key={`hr-${i}`} className="strategy-divider" />);
+      continue;
+    }
+
+    if (trimmed.startsWith('#') || /^STAGE\s*[1-4]/i.test(trimmed) || /^EXECUTIVE\s*SUMMARY/i.test(trimmed)) {
+      const level = trimmed.startsWith('####') ? 4 : (trimmed.startsWith('###') ? 3 : (trimmed.startsWith('##') ? 2 : (trimmed.startsWith('#') ? 1 : 2)));
+      const cleanTitle = trimmed.replace(/^#+\s*/, '');
+
+      let stageClass = '';
+      let stageIcon = '📌';
+      if (/STAGE\s*1/i.test(cleanTitle) || /GAP/i.test(cleanTitle)) {
+        stageClass = 'stage-1-header';
+        stageIcon = '🔍';
+      } else if (/STAGE\s*2/i.test(cleanTitle) || /OFFER|HORMOZI|ICP|SEGMENTATION/i.test(cleanTitle)) {
+        stageClass = 'stage-2-header';
+        stageIcon = '💡';
+      } else if (/STAGE\s*3/i.test(cleanTitle) || /CREATIVE|SCRIPT/i.test(cleanTitle)) {
+        stageClass = 'stage-3-header';
+        stageIcon = '🎨';
+      } else if (/STAGE\s*4/i.test(cleanTitle) || /CAMPAIGN|BUDGET/i.test(cleanTitle)) {
+        stageClass = 'stage-4-header';
+        stageIcon = '📊';
+      } else if (/EXECUTIVE\s*SUMMARY/i.test(cleanTitle)) {
+        stageClass = 'exec-summary-header';
+        stageIcon = '⚡';
+      }
+
+      elements.push(
+        <div key={`head-${i}`} className={`strategy-heading-wrap ${stageClass}`}>
+          <span className="heading-icon">{stageIcon}</span>
+          {level === 1 && <h2 className="strategy-h1">{cleanTitle}</h2>}
+          {level === 2 && <h3 className="strategy-h2">{cleanTitle}</h3>}
+          {level >= 3 && <h4 className="strategy-h3">{cleanTitle}</h4>}
+        </div>
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith('>')) {
+      elements.push(
+        <blockquote key={`quote-${i}`} className="strategy-quote">
+          {renderInlineMarkdown(trimmed.replace(/^>\s*/, ''))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    if (/^(\*|-|\d+\.)\s+/.test(trimmed)) {
+      const match = trimmed.match(/^(\*|-|\d+\.)\s+(.*)/);
+      elements.push(
+        <div key={`li-${i}`} className="strategy-list-item">
+          <span className="list-bullet">{match[1]}</span>
+          <span className="list-content">{renderInlineMarkdown(match[2])}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (!trimmed) {
+      elements.push(<div key={`space-${i}`} className="strategy-spacing"></div>);
+      continue;
+    }
+
+    elements.push(
+      <p key={`p-${i}`} className="strategy-p">
+        {renderInlineMarkdown(trimmed)}
+      </p>
+    );
+  }
+
+  if (inCodeBlock) flushCode('code-final');
+  if (inTable) flushTable('tbl-final');
+
+  return elements;
+}
+
+function StrategyAgentSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
+  const [strategyNiche, setStrategyNiche] = useState('');
+  const [strategyPlatforms, setStrategyPlatforms] = useState(['Instagram', 'Facebook']);
+  const [strategyGoal, setStrategyGoal] = useState('Book Free Demo / Consultation Call');
+  const [strategyCustomGoal, setStrategyCustomGoal] = useState('');
+  const [strategyFormat, setStrategyFormat] = useState('both');
+  const [strategyLoading, setStrategyLoading] = useState(false);
+  const [strategyStageIndex, setStrategyStageIndex] = useState(0);
+  const [strategyError, setStrategyError] = useState('');
+  const [strategyResult, setStrategyResult] = useState('');
+  const [strategyMeta, setStrategyMeta] = useState(null);
+  const [activeStageFilter, setActiveStageFilter] = useState('all');
+  const [copyNotice, setCopyNotice] = useState('');
+  const [strategyHistory, setStrategyHistory] = useState(() => {
+    try {
+      const raw = localStorage.getItem('ad_strategy_history');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const notifyCopy = (msg) => {
+    setCopyNotice(msg);
+    setTimeout(() => setCopyNotice(''), 3000);
+  };
+
+  const handleRunPipeline = async () => {
+    const trimmedNiche = strategyNiche.trim();
+    if (!trimmedNiche) {
+      setStrategyError('Please enter a niche, product, or service topic to run the strategy pipeline.');
+      return;
+    }
+    setStrategyError('');
+    setStrategyLoading(true);
+    setStrategyStageIndex(1);
+
+    const timer = setInterval(() => {
+      setStrategyStageIndex((prev) => (prev < 4 ? prev + 1 : prev));
+    }, 4500);
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const finalGoal = strategyGoal === 'custom' ? (strategyCustomGoal.trim() || 'Direct Conversion') : strategyGoal;
+    const payload = {
+      niche: trimmedNiche,
+      platforms: strategyPlatforms.join(', ') || 'Instagram, Facebook',
+      goal: finalGoal,
+      formatPreference: strategyFormat,
+    };
+    if (effectiveKey) {
+      payload.apiKey = effectiveKey;
+    }
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) {
+        headers['X-Gemini-API-Key'] = effectiveKey;
+      }
+
+      const res = await fetch(`${API_BASE}/api/strategy-agent`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate ad strategy');
+      }
+
+      const resultText = data.result;
+      const meta = {
+        niche: trimmedNiche,
+        platforms: payload.platforms,
+        goal: payload.goal,
+        format: strategyFormat,
+        timestamp: new Date().toLocaleString(),
+        model: data.model || apiHealth.model || 'gemini-2.5-flash',
+      };
+
+      setStrategyResult(resultText);
+      setStrategyMeta(meta);
+      setActiveStageFilter('all');
+
+      const historyItem = {
+        id: Date.now().toString(),
+        ...meta,
+        result: resultText,
+      };
+      setStrategyHistory((prev) => {
+        const updated = [historyItem, ...prev.filter((p) => p.niche !== trimmedNiche)].slice(0, 20);
+        try {
+          localStorage.setItem('ad_strategy_history', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed saving strategy history:', e);
+        }
+        return updated;
+      });
+    } catch (err) {
+      setStrategyError(err.message || 'An error occurred while generating the strategy.');
+    } finally {
+      clearInterval(timer);
+      setStrategyLoading(false);
+      setStrategyStageIndex(0);
+    }
+  };
+
+  const handleCopyFull = () => {
+    if (!strategyResult) return;
+    navigator.clipboard.writeText(strategyResult);
+    notifyCopy('Full Ad Strategy copied to clipboard!');
+  };
+
+  const handleCopyPrompt = () => {
+    const promptSnippet = extractStrategySnippet(strategyResult, 'prompt');
+    if (promptSnippet) {
+      navigator.clipboard.writeText(promptSnippet);
+      notifyCopy('Canva/Gemini Image Prompt copied!');
+    } else {
+      notifyCopy('Prompt block copied.');
+      navigator.clipboard.writeText(strategyResult);
+    }
+  };
+
+  const handleCopyScript = () => {
+    const scriptSnippet = extractStrategySnippet(strategyResult, 'script');
+    if (scriptSnippet) {
+      navigator.clipboard.writeText(scriptSnippet);
+      notifyCopy('30-Second Video Screenplay copied!');
+    } else {
+      notifyCopy('Script block copied.');
+      navigator.clipboard.writeText(strategyResult);
+    }
+  };
+
+  const handleCopySummary = () => {
+    const summarySnippet = extractStrategySnippet(strategyResult, 'summary');
+    if (summarySnippet) {
+      navigator.clipboard.writeText(summarySnippet);
+      notifyCopy('Executive Summary copied!');
+    } else {
+      notifyCopy('Summary copied.');
+      navigator.clipboard.writeText(strategyResult);
+    }
+  };
+
+  const handleLoadHistory = (item) => {
+    setStrategyResult(item.result);
+    setStrategyNiche(item.niche);
+    setStrategyMeta({
+      niche: item.niche,
+      platforms: item.platforms,
+      goal: item.goal,
+      format: item.format,
+      timestamp: item.timestamp,
+      model: item.model,
+    });
+    setActiveStageFilter('all');
+    window.scrollTo({ top: 200, behavior: 'smooth' });
+  };
+
+  const handleDeleteHistory = (id, e) => {
+    e.stopPropagation();
+    setStrategyHistory((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('ad_strategy_history', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to update history:', err);
+      }
+      return updated;
+    });
+  };
+
+  const hasPrompt = Boolean(extractStrategySnippet(strategyResult, 'prompt'));
+  const hasScript = Boolean(extractStrategySnippet(strategyResult, 'script'));
+
+  return (
+    <div className="strategy-agent-section">
+      {copyNotice && <div className="strategy-toast-notice">{copyNotice}</div>}
+
+      <div className="strategy-hero-card">
+        <div className="strategy-hero-badge">
+          <span className="badge-pulse"></span>
+          <span>Autonomous 4-Stage Ad Strategy Pipeline</span>
+        </div>
+        <h2 className="strategy-hero-title">Ad Strategy Agent</h2>
+        <p className="strategy-hero-subtitle">
+          Give any niche, product, or service. The agent conducts real-time cross-platform gap research (Reddit, Google, TikTok, Facebook), engineers an Alex Hormozi irresistible offer, scripts direct-response creatives (Canva prompts & a 30s Tarantino/Wilder video screenplay), and designs the complete Meta campaign architecture.
+        </p>
+      </div>
+
+      <section className="card strategy-form-card">
+        <div className="form-group">
+          <div className="label-with-hint">
+            <label className="input-label" htmlFor="strategyNicheInput">
+              <strong>1. Niche / Product / Service Topic *</strong>
+            </label>
+            <span className="label-hint">Be specific for deeper gap-to-creative insights</span>
+          </div>
+          <textarea
+            id="strategyNicheInput"
+            className="strategy-textarea"
+            rows={3}
+            placeholder="e.g., B2B SaaS lead-gen campaign targeting Indian manufacturers, or Cold plunge tubs for fitness enthusiasts, or AI bookkeeping for Shopify stores"
+            value={strategyNiche}
+            onChange={(e) => setStrategyNiche(e.target.value)}
+          />
+          <div className="strategy-quick-chips">
+            <span className="chips-label">Quick test examples:</span>
+            {SAMPLE_NICHES.map((sample, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="quick-chip-btn"
+                onClick={() => {
+                  setStrategyNiche(sample.niche);
+                  setStrategyGoal(sample.goal);
+                  setStrategyPlatforms(sample.platforms);
+                  setStrategyFormat(sample.format);
+                }}
+              >
+                {sample.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="input-label">
+            <strong>2. Platform(s) to Advertise On</strong>
+          </label>
+          <div className="platform-pills-row">
+            {AVAILABLE_PLATFORMS.map((platform) => {
+              const isSelected = strategyPlatforms.includes(platform);
+              return (
+                <button
+                  key={platform}
+                  type="button"
+                  className={`platform-pill ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    if (isSelected) {
+                      if (strategyPlatforms.length > 1) {
+                        setStrategyPlatforms(strategyPlatforms.filter((p) => p !== platform));
+                      }
+                    } else {
+                      setStrategyPlatforms([...strategyPlatforms, platform]);
+                    }
+                  }}
+                >
+                  <span className="pill-check">{isSelected ? '✓' : '+'}</span>
+                  <span>{platform}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="input-label">
+            <strong>3. Primary CTA / Conversion Goal</strong>
+          </label>
+          <div className="goal-pills-row">
+            {PRESET_GOALS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                className={`goal-pill ${strategyGoal === g.id ? 'selected' : ''}`}
+                onClick={() => setStrategyGoal(g.id)}
+              >
+                <span>{g.label}</span>
+              </button>
+            ))}
+          </div>
+          {strategyGoal === 'custom' && (
+            <input
+              type="text"
+              className="url-field custom-goal-input"
+              placeholder="Enter your custom conversion goal / CTA..."
+              value={strategyCustomGoal}
+              onChange={(e) => setStrategyCustomGoal(e.target.value)}
+              autoFocus
+            />
+          )}
+        </div>
+
+        <div className="form-group">
+          <label className="input-label">
+            <strong>4. Creative Format Preference</strong>
+          </label>
+          <div className="format-options-grid">
+            <button
+              type="button"
+              className={`format-card-btn ${strategyFormat === 'both' ? 'selected' : ''}`}
+              onClick={() => setStrategyFormat('both')}
+            >
+              <span className="format-icon">✨</span>
+              <div className="format-info">
+                <strong>Both (Static + 30s Script)</strong>
+                <span>Canva/Midjourney prompt AND 30s Tarantino/Wilder video screenplay</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className={`format-card-btn ${strategyFormat === 'short-video' ? 'selected' : ''}`}
+              onClick={() => setStrategyFormat('short-video')}
+            >
+              <span className="format-icon">🎬</span>
+              <div className="format-info">
+                <strong>Short-Video Script</strong>
+                <span>30s direct-response screenplay (Hook, Tension, 3 Proof beats, Objection, CTA)</span>
+              </div>
+            </button>
+            <button
+              type="button"
+              className={`format-card-btn ${strategyFormat === 'static' ? 'selected' : ''}`}
+              onClick={() => setStrategyFormat('static')}
+            >
+              <span className="format-icon">🖼️</span>
+              <div className="format-info">
+                <strong>Static Ad Prompt</strong>
+                <span>Copy-pasteable Canva/Gemini image prompt & 2 headline variants</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {strategyError && <div className="error-toast">{strategyError}</div>}
+
+        <button
+          type="button"
+          className="btn-primary btn-run-pipeline"
+          onClick={handleRunPipeline}
+          disabled={strategyLoading}
+        >
+          {strategyLoading ? (
+            <>
+              <span className="spinner"></span>
+              <span>Executing 4-Stage Ad Strategy Pipeline...</span>
+            </>
+          ) : (
+            <>
+              <span>🚀 Run 4-Stage Ad Strategy Pipeline</span>
+            </>
+          )}
+        </button>
+      </section>
+
+      {strategyLoading && (
+        <div className="pipeline-progress-card">
+          <div className="progress-header">
+            <h4>⚡ Running Ad Strategy Pipeline</h4>
+            <span className="progress-status-pill">Active Live Run</span>
+          </div>
+          <div className="pipeline-steps">
+            <div className={`pipeline-step ${strategyStageIndex >= 1 ? 'active' : ''} ${strategyStageIndex > 1 ? 'completed' : ''}`}>
+              <div className="step-circle">{strategyStageIndex > 1 ? '✓' : '1'}</div>
+              <div className="step-body">
+                <strong>Stage 1: Cross-Platform Gap Research</strong>
+                <span>Scouring Reddit, Google reviews, forums, and TikTok comments for customer complaints</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${strategyStageIndex >= 2 ? 'active' : ''} ${strategyStageIndex > 2 ? 'completed' : ''}`}>
+              <div className="step-circle">{strategyStageIndex > 2 ? '✓' : '2'}</div>
+              <div className="step-body">
+                <strong>Stage 2: ICP & Hormozi Offer Engineering</strong>
+                <span>Avatar triggers, segmentation, and calculating Dream Outcome / Time & Effort equation</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${strategyStageIndex >= 3 ? 'active' : ''} ${strategyStageIndex > 3 ? 'completed' : ''}`}>
+              <div className="step-circle">{strategyStageIndex > 3 ? '✓' : '3'}</div>
+              <div className="step-body">
+                <strong>Stage 3: Direct-Response Creative Output</strong>
+                <span>Generating copy-pasteable image prompts and 30s Tarantino/Wilder screenplay</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${strategyStageIndex >= 4 ? 'active' : ''}`}>
+              <div className="step-circle">{strategyStageIndex >= 4 ? '⏳' : '4'}</div>
+              <div className="step-body">
+                <strong>Stage 4: Meta Campaign Architecture & Budget</strong>
+                <span>CBO vs ABO, testing framework, 20-30% scaling cadence, and compliance</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {strategyResult && !strategyLoading && (
+        <div className="strategy-results-card">
+          <div className="strategy-results-header">
+            <div className="results-title-group">
+              <span className="strategy-topic-tag">Ad Strategy Plan</span>
+              <h3 className="results-niche-title">{strategyMeta?.niche || strategyNiche}</h3>
+              <div className="strategy-meta-tags">
+                <span className="meta-tag">📱 {strategyMeta?.platforms || strategyPlatforms.join(', ')}</span>
+                <span className="meta-tag">🎯 {strategyMeta?.goal || strategyGoal}</span>
+                <span className="meta-tag">🎨 Format: {strategyMeta?.format || strategyFormat}</span>
+                {strategyMeta?.model && <span className="meta-tag model-tag">⚡ {strategyMeta.model}</span>}
+              </div>
+            </div>
+
+            <div className="results-action-buttons">
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopyFull}
+              >
+                📋 Copy Full Plan
+              </button>
+              {hasPrompt && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyPrompt}
+                >
+                  🎨 Copy Image Prompt
+                </button>
+              )}
+              {hasScript && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyScript}
+                >
+                  🎬 Copy 30s Script
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopySummary}
+              >
+                ⚡ Copy Summary
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-action-sm"
+                onClick={() => {
+                  setStrategyResult('');
+                  window.scrollTo({ top: 120, behavior: 'smooth' });
+                }}
+              >
+                🔄 New Topic
+              </button>
+            </div>
+          </div>
+
+          <div className="stage-filter-tabs">
+            {[
+              { id: 'all', label: '📋 All 4 Stages' },
+              { id: 'summary', label: '⚡ Executive Summary' },
+              { id: 'stage1', label: '🔍 1. Gap Research' },
+              { id: 'stage2', label: '💡 2. Hormozi Offer' },
+              { id: 'stage3', label: '🎨 3. Creative Output' },
+              { id: 'stage4', label: '📊 4. Campaign & Budget' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`stage-filter-btn ${activeStageFilter === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveStageFilter(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="strategy-content-body">
+            <FormattedStrategyMarkdown
+              content={strategyResult}
+              filterStage={activeStageFilter}
+              onCopy={notifyCopy}
+            />
+          </div>
+        </div>
+      )}
+
+      {strategyHistory.length > 0 && (
+        <section className="card strategy-history-card">
+          <div className="history-header">
+            <h4>💾 Saved Strategy History ({strategyHistory.length})</h4>
+            <span className="history-subtitle">Previous pipeline runs saved in local browser storage</span>
+          </div>
+
+          <div className="history-items-grid">
+            {strategyHistory.map((item) => (
+              <div
+                key={item.id}
+                className="history-item-card"
+                onClick={() => handleLoadHistory(item)}
+              >
+                <div className="history-item-top">
+                  <span className="history-item-date">{item.timestamp}</span>
+                  <button
+                    type="button"
+                    className="btn-delete-history"
+                    title="Delete strategy"
+                    onClick={(e) => handleDeleteHistory(item.id, e)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <h5 className="history-item-niche">{item.niche}</h5>
+                <div className="history-item-badges">
+                  <span className="badge-sm">{item.platforms}</span>
+                  <span className="badge-sm">{item.goal}</span>
+                </div>
+                <button type="button" className="btn-load-history">
+                  Load Strategy →
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('ad_analyzer_auth') === 'true';
+  });
+
+  const [mainSection, setMainSection] = useState(() => {
+    return localStorage.getItem('ad_analyzer_section') || 'strategy-agent';
   });
 
   const [activeTab, setActiveTab] = useState('video'); // 'video' | 'image' | 'url'
@@ -738,6 +1566,42 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
         </div>
       </header>
 
+      {/* Top-Level Section Navigation Switcher */}
+      <nav className="section-nav-bar" aria-label="Main section navigation">
+        <button
+          type="button"
+          className={`section-nav-pill ${mainSection === 'analyzer' ? 'active' : ''}`}
+          onClick={() => {
+            setMainSection('analyzer');
+            localStorage.setItem('ad_analyzer_section', 'analyzer');
+          }}
+        >
+          <span className="pill-icon">🎬</span>
+          <div className="pill-text-wrap">
+            <span className="pill-title">Ad Creative Analyzer</span>
+            <span className="pill-desc">Video • Image • URL Teardown</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          className={`section-nav-pill ${mainSection === 'strategy-agent' ? 'active' : ''}`}
+          onClick={() => {
+            setMainSection('strategy-agent');
+            localStorage.setItem('ad_analyzer_section', 'strategy-agent');
+          }}
+        >
+          <span className="pill-icon">⚡</span>
+          <div className="pill-text-wrap">
+            <div className="pill-title-row">
+              <span className="pill-title">Ad Strategy Agent</span>
+              <span className="pill-badge">Autonomous 4-Stage</span>
+            </div>
+            <span className="pill-desc">Gap Research → Hormozi Offer → Creative → Meta Campaign</span>
+          </div>
+        </button>
+      </nav>
+
       {/* Main Content Layout */}
       <main className="app-main">
         {/* Warning if API key is not set anywhere */}
@@ -761,8 +1625,20 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
           </div>
         )}
 
-        {/* Input & Inspector Grid */}
-        <div className="workspace-grid">
+        {mainSection === 'strategy-agent' ? (
+          <StrategyAgentSection
+            apiHealth={apiHealth}
+            customApiKey={customApiKey}
+            API_BASE={API_BASE}
+            onOpenKeyModal={() => {
+              setModalKeyInput(customApiKey);
+              setShowKeyModal(true);
+            }}
+          />
+        ) : (
+          <>
+            {/* Input & Inspector Grid */}
+            <div className="workspace-grid">
           {/* Left Column: Input Hub */}
           <section className="card input-card">
             <div className="tab-bar">
@@ -1332,6 +2208,8 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
 
       {/* Footer */}
