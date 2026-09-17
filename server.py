@@ -128,6 +128,53 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+
+        if parsed.path == "/api/benchmark":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            prompt = payload.get("prompt", "").strip()
+            if not prompt:
+                self._send_json(400, {"error": "Benchmark research prompt cannot be empty."})
+                return
+
+            try:
+                client = genai.Client(api_key=api_key)
+                config = types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are an elite Meta Ads (Facebook & Instagram) media buyer and growth strategist. "
+                        "When requested for benchmark data, provide rigorous, realistic 2026 Meta Ads benchmarks, "
+                        "CPL, CPC, and CTR estimates, CBO vs ABO ad set structures, budget calculations to exit the learning phase, "
+                        "creative format retention benchmarks, funnel architecture, and compliance guidelines. "
+                        "Cite specific agency benchmarks, Meta documentation, and industry case studies from 2025-2026. "
+                        "Format your response with clear Markdown headings, tables, and bullet points."
+                    )
+                )
+                raw_text, used_model = ad_analyzer._call_with_fallback(client, [prompt], config)
+                self._send_json(200, {
+                    "success": True,
+                    "result": raw_text,
+                    "model": used_model,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed running benchmark research: {err_str}", "details": err_str})
+                return
+
         if parsed.path != "/api/analyze":
             self._send_json(404, {"error": "Not found"})
             return

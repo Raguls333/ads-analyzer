@@ -31,6 +31,14 @@ export default function App() {
   const [modalKeyInput, setModalKeyInput] = useState('');
   const [quickKeyInput, setQuickKeyInput] = useState('');
 
+  // Meta Ads Benchmark Research Prompt Modal State
+  const [showMetaModal, setShowMetaModal] = useState(false);
+  const [selectedMetaAd, setSelectedMetaAd] = useState(null);
+  const [metaPromptRegion, setMetaPromptRegion] = useState('United States / Global');
+  const [generatingBenchmark, setGeneratingBenchmark] = useState(false);
+  const [benchmarkReport, setBenchmarkReport] = useState(null);
+  const [benchmarkError, setBenchmarkError] = useState('');
+
   const fileInputRef = useRef(null);
   const API_BASE = import.meta.env.VITE_API_BASE || '';
 
@@ -295,6 +303,80 @@ ${currentAnalysis.notes || 'N/A'}
     navigator.clipboard.writeText(md);
     setCopySuccess('Markdown copied to clipboard!');
     setTimeout(() => setCopySuccess(''), 3000);
+  };
+
+  // Generate exact Meta benchmark research prompt with ad metadata
+  const generateMetaBenchmarkPrompt = (item, region = metaPromptRegion) => {
+    if (!item) return '';
+    const obs = item.observed || item || {};
+    const inf = item.inference || item || {};
+
+    const productService = (inf.positioning || obs.offer || 'this product/service').trim();
+    const cta = (obs.cta || 'taking the next step').trim();
+    const targetRegion = (region || 'United States / Global').trim();
+    const niche = (inf.audience || inf.positioning || 'this niche audience').trim();
+    const industry = (inf.positioning || 'this industry').trim();
+    const awarenessLevel = (inf.awareness_level || 'Problem-Aware / Solution-Aware').trim();
+    const pricePoint = (obs.price_shown || 'standard pricing').trim();
+
+    return `Research Meta Ads (Facebook/Instagram) benchmark data and strategy for a ${productService} with the goal of "${cta}". I need:
+Cost benchmarks: average CPL (cost per lead), CPC, and CTR for this industry/audience in ${targetRegion} in 2026, broken down by campaign objective (Leads vs Conversions vs Traffic).
+Budget & duration: recommended daily budget to exit learning phase, typical testing-phase spend before declaring a winning creative, and scaling cadence that avoids resetting the algorithm.
+Campaign structure: best-performing ad set structure for this audience size (CBO vs ABO, how many ad sets, how many creatives per ad set, broad vs interest targeting for ${niche}).
+Creative benchmarks: average video completion rates, hook retention (3-second view rate), and what creative formats (UGC, talking-head, testimonial, static) currently outperform for ${industry} in 2026.
+Funnel: whether single-stage cold campaigns or TOF/retargeting splits perform better for ${awarenessLevel} audiences buying ${pricePoint}.
+Compliance/policy: any current Meta ad policy restrictions relevant to ${industry}.
+Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, or industry reports — not generic advice.`;
+  };
+
+  const handleQuickCopyMetaPrompt = (adItem, customRegion = metaPromptRegion) => {
+    const text = generateMetaBenchmarkPrompt(adItem, customRegion);
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopySuccess('🎯 Meta benchmark prompt copied to clipboard!');
+    setTimeout(() => setCopySuccess(''), 3500);
+  };
+
+  const handleOpenMetaPromptModal = (adItem) => {
+    setSelectedMetaAd(adItem);
+    setBenchmarkReport(null);
+    setBenchmarkError('');
+    setShowMetaModal(true);
+  };
+
+  const handleRunBenchmarkResearch = async () => {
+    if (!selectedMetaAd) return;
+    const prompt = generateMetaBenchmarkPrompt(selectedMetaAd, metaPromptRegion);
+    setGeneratingBenchmark(true);
+    setBenchmarkError('');
+    setBenchmarkReport(null);
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (customApiKey.trim()) {
+        headers['X-Gemini-API-Key'] = customApiKey.trim();
+      }
+
+      const res = await fetch(`${API_BASE}/api/benchmark`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          prompt,
+          apiKey: customApiKey.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed generating benchmark research');
+      }
+
+      setBenchmarkReport(data.result);
+    } catch (err) {
+      setBenchmarkError(err.message || 'Error running benchmark research');
+    } finally {
+      setGeneratingBenchmark(false);
+    }
   };
 
   // Filter logs
@@ -658,8 +740,28 @@ ${currentAnalysis.notes || 'N/A'}
                 <h2>Analysis Breakdown</h2>
                 {currentAnalysis && (
                   <div className="action-button-group">
-                    <button type="button" className="action-btn" onClick={handleCopyMarkdown}>
-                      📋 Copy Markdown
+                    <button
+                      type="button"
+                      className="action-btn action-btn-accent"
+                      onClick={() => handleOpenMetaPromptModal(currentAnalysis)}
+                      title="Customize or Run 2026 Meta Ads Benchmark Research"
+                    >
+                      🎯 Meta Benchmark Prompt
+                    </button>
+                    <button
+                      type="button"
+                      className="action-btn"
+                      onClick={() => handleQuickCopyMetaPrompt(currentAnalysis)}
+                      title="Directly copy Meta benchmark prompt to clipboard"
+                    >
+                      📋 Copy Prompt
+                    </button>
+                    <button
+                      type="button"
+                      className="action-btn"
+                      onClick={handleCopyMarkdown}
+                    >
+                      📝 Markdown
                     </button>
                   </div>
                 )}
@@ -897,8 +999,19 @@ ${currentAnalysis.notes || 'N/A'}
                           <span className="badge badge-awareness-sm">{item.awareness_level}</span>
                         ) : '—'}
                       </td>
-                      <td>
+                      <td className="cell-actions-row">
                         <button type="button" className="btn-inspect">Inspect →</button>
+                        <button
+                          type="button"
+                          className="btn-meta-row"
+                          title="Copy Meta benchmark research prompt for this ad"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuickCopyMetaPrompt(item);
+                          }}
+                        >
+                          🎯 Prompt
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -994,6 +1107,121 @@ ${currentAnalysis.notes || 'N/A'}
                   Save API Key
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Meta Benchmark Research Prompt Modal */}
+      {showMetaModal && selectedMetaAd && (
+        <div className="modal-backdrop" onClick={() => setShowMetaModal(false)}>
+          <div className="modal-card meta-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="meta-modal-title-row">
+                <span className="meta-badge-tag">Meta Ads 2026 Strategy</span>
+                <h3>🎯 Meta Benchmark Research Prompt</h3>
+              </div>
+              <button type="button" className="close-btn" onClick={() => setShowMetaModal(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              <p className="modal-desc">
+                This prompt automatically injects your ad's positioning, CTA, audience, and price point into a research framework for 2026 Meta benchmarks, CPL/CPC targets, and scaling architecture.
+              </p>
+
+              {/* Custom Region Input & Ad Pill Summary */}
+              <div className="meta-controls-grid">
+                <div className="form-group">
+                  <label className="input-label" htmlFor="metaRegionInput">Target Country / Region</label>
+                  <input
+                    id="metaRegionInput"
+                    type="text"
+                    className="url-field meta-region-field"
+                    placeholder="e.g. United States, India, UK, Europe, Australia"
+                    value={metaPromptRegion}
+                    onChange={(e) => setMetaPromptRegion(e.target.value)}
+                  />
+                </div>
+                <div className="meta-meta-pills">
+                  <div className="meta-pill">
+                    <strong>Positioning:</strong> {selectedMetaAd.inference?.positioning || selectedMetaAd.positioning || 'N/A'}
+                  </div>
+                  <div className="meta-pill">
+                    <strong>CTA:</strong> {selectedMetaAd.observed?.cta || selectedMetaAd.cta || 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Generated Prompt Box */}
+              <div className="meta-prompt-preview-wrap">
+                <div className="meta-prompt-preview-header">
+                  <span>Prompt for ChatGPT / Claude / Perplexity / Gemini</span>
+                  <button
+                    type="button"
+                    className="btn-copy-sm"
+                    onClick={() => handleQuickCopyMetaPrompt(selectedMetaAd, metaPromptRegion)}
+                  >
+                    📋 Copy Prompt
+                  </button>
+                </div>
+                <pre className="meta-prompt-text">
+                  {generateMetaBenchmarkPrompt(selectedMetaAd, metaPromptRegion)}
+                </pre>
+              </div>
+
+              {/* Research Action Button */}
+              <div className="meta-research-action-row">
+                <button
+                  type="button"
+                  className="btn-primary btn-run-benchmark"
+                  onClick={handleRunBenchmarkResearch}
+                  disabled={generatingBenchmark}
+                >
+                  {generatingBenchmark ? (
+                    <>
+                      <span className="spinner"></span>
+                      <span>Synthesizing 2026 Benchmarks with Gemini...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>⚡ Run Meta Benchmark Research with Gemini</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleQuickCopyMetaPrompt(selectedMetaAd, metaPromptRegion)}
+                >
+                  📋 Copy to Clipboard
+                </button>
+              </div>
+
+              {benchmarkError && (
+                <div className="error-toast">{benchmarkError}</div>
+              )}
+
+              {benchmarkReport && (
+                <div className="benchmark-report-container">
+                  <div className="report-header">
+                    <h4>📊 2026 Meta Ads Benchmark Strategy Report</h4>
+                    <button
+                      type="button"
+                      className="btn-copy-sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(benchmarkReport);
+                        setCopySuccess('Benchmark report copied to clipboard!');
+                        setTimeout(() => setCopySuccess(''), 3000);
+                      }}
+                    >
+                      📋 Copy Report
+                    </button>
+                  </div>
+                  <div className="report-content">
+                    <pre className="report-pre">{benchmarkReport}</pre>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
