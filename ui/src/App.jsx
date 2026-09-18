@@ -2058,8 +2058,28 @@ function extractInstaAuditSnippet(text, type) {
     if (match) return match[0].replace(/^(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)\s*/i, '').trim();
     return '';
   }
+  if (type === 'hook') {
+    const match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    if (match) return match[0].trim();
+    return '';
+  }
+  if (type === 'feedback') {
+    const match = text.match(/(?:STAGE\s*4[\s\S]*?)(?:STAGE\s*5|$)/i);
+    if (match) return match[0].trim();
+    return '';
+  }
+  if (type === 'trends') {
+    const match = text.match(/(?:STAGE\s*5[\s\S]*?)(?:STAGE\s*6|$)/i);
+    if (match) return match[0].trim();
+    return '';
+  }
+  if (type === 'gaps') {
+    const match = text.match(/(?:STAGE\s*6[\s\S]*?)(?:STAGE\s*7|$)/i);
+    if (match) return match[0].trim();
+    return '';
+  }
   if (type === 'reels' || type === 'plan') {
-    const match = text.match(/(?:STAGE\s*5[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    const match = text.match(/(?:STAGE\s*7[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
     if (match) return match[0].trim();
     return '';
   }
@@ -2086,7 +2106,13 @@ function FormattedInstaAuditMarkdown({ content, filterStage, onCopy }) {
     const match = content.match(/(?:STAGE\s*4[\s\S]*?)(?:STAGE\s*5|$)/i);
     if (match) targetContent = match[0];
   } else if (filterStage === 'stage5') {
-    const match = content.match(/(?:STAGE\s*5[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    const match = content.match(/(?:STAGE\s*5[\s\S]*?)(?:STAGE\s*6|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage6') {
+    const match = content.match(/(?:STAGE\s*6[\s\S]*?)(?:STAGE\s*7|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage7') {
+    const match = content.match(/(?:STAGE\s*7[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
     if (match) targetContent = match[0];
   }
 
@@ -2208,7 +2234,7 @@ function FormattedInstaAuditMarkdown({ content, filterStage, onCopy }) {
       continue;
     }
 
-    if (/^STAGE\s*[1-5]/i.test(trimmed)) {
+    if (/^STAGE\s*[1-7]/i.test(trimmed)) {
       elements.push(
         <div key={`stage-${i}`} className="strategy-stage-banner insta-stage-banner">
           <span className="stage-banner-badge">STAGE</span>
@@ -2317,8 +2343,8 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
     setAuditStageIndex(1);
 
     const timer = setInterval(() => {
-      setAuditStageIndex((prev) => (prev < 5 ? prev + 1 : prev));
-    }, 4500);
+      setAuditStageIndex((prev) => (prev < 7 ? prev + 1 : prev));
+    }, 3800);
 
     const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
     const payload = { url: rawVal };
@@ -2381,6 +2407,39 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
     notifyCopy('Full Instagram Profile Audit copied to clipboard!');
   };
 
+  const handleCopyHookDeepDive = () => {
+    const snippet = extractInstaAuditSnippet(auditResult, 'hook');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('🪝 Outlier Hook Analysis & Formulas copied!');
+    } else {
+      navigator.clipboard.writeText(auditResult);
+      notifyCopy('Audit copied to clipboard.');
+    }
+  };
+
+  const handleCopyFeedback = () => {
+    const snippet = extractInstaAuditSnippet(auditResult, 'feedback');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('🛠️ Constructive Audit & Actionable Roadmap copied!');
+    } else {
+      navigator.clipboard.writeText(auditResult);
+      notifyCopy('Audit copied to clipboard.');
+    }
+  };
+
+  const handleCopyTrends = () => {
+    const snippet = extractInstaAuditSnippet(auditResult, 'trends');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('📈 Niche Trends & Competitive Influences copied!');
+    } else {
+      navigator.clipboard.writeText(auditResult);
+      notifyCopy('Audit copied to clipboard.');
+    }
+  };
+
   const handleCopyReelPlan = () => {
     const reelSnippet = extractInstaAuditSnippet(auditResult, 'reels');
     if (reelSnippet) {
@@ -2429,6 +2488,9 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
     });
   };
 
+  const hasHookDeepDive = Boolean(extractInstaAuditSnippet(auditResult, 'hook'));
+  const hasFeedback = Boolean(extractInstaAuditSnippet(auditResult, 'feedback'));
+  const hasTrends = Boolean(extractInstaAuditSnippet(auditResult, 'trends'));
   const hasReelPlan = Boolean(extractInstaAuditSnippet(auditResult, 'reels'));
 
   return (
@@ -2508,7 +2570,7 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
             </>
           ) : (
             <>
-              <span>🔍 Run 5-Stage Instagram Profile Audit ➡️</span>
+              <span>🔍 Run 7-Stage Instagram Profile Audit ➡️</span>
             </>
           )}
         </button>
@@ -2539,22 +2601,36 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
             <div className={`pipeline-step ${auditStageIndex >= 3 ? 'active' : ''} ${auditStageIndex > 3 ? 'completed' : ''}`}>
               <div className="step-circle">{auditStageIndex > 3 ? '✓' : '3'}</div>
               <div className="step-body">
-                <strong>Stage 3: The Good & The Bad Audit</strong>
-                <span>Unvarnished diagnosis of authority strengths, buried captions & inconsistent cadence</span>
+                <strong>Stage 3: Outlier Hook Analysis & Proven Formulas</strong>
+                <span>Extracting #1 best performing hook, category, psychological trigger & swipe formula</span>
               </div>
             </div>
             <div className={`pipeline-step ${auditStageIndex >= 4 ? 'active' : ''} ${auditStageIndex > 4 ? 'completed' : ''}`}>
               <div className="step-circle">{auditStageIndex > 4 ? '✓' : '4'}</div>
               <div className="step-body">
-                <strong>Stage 4: Niche Content Gaps & Competitor Opportunities</strong>
+                <strong>Stage 4: Constructive Audit & Actionable Roadmap</strong>
+                <span>Unvarnished diagnosis of bio friction, 0-3s video drop-offs & prioritized fix steps</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 5 ? 'active' : ''} ${auditStageIndex > 5 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 5 ? '✓' : '5'}</div>
+              <div className="step-body">
+                <strong>Stage 5: Niche Trends & Competitive Influences</strong>
+                <span>Analyzing 2026 niche trends, creators modeled/followed & untapped waves</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${auditStageIndex >= 6 ? 'active' : ''} ${auditStageIndex > 6 ? 'completed' : ''}`}>
+              <div className="step-circle">{auditStageIndex > 6 ? '✓' : '6'}</div>
+              <div className="step-body">
+                <strong>Stage 6: Niche Content Gaps & Competitor Opportunities</strong>
                 <span>Uncovering high-converting topics competitors cover that this account neglects</span>
               </div>
             </div>
-            <div className={`pipeline-step ${auditStageIndex >= 5 ? 'active' : ''}`}>
-              <div className="step-circle">{auditStageIndex >= 5 ? '⏳' : '5'}</div>
+            <div className={`pipeline-step ${auditStageIndex >= 7 ? 'active' : ''}`}>
+              <div className="step-circle">{auditStageIndex >= 7 ? '⏳' : '7'}</div>
               <div className="step-body">
-                <strong>Stage 5: Outperforming Content Plan & 5 Ready-to-Shoot Reels</strong>
-                <span>Writing 5 specific, grounded Reel scripts to outperform their best videos</span>
+                <strong>Stage 7: Outperforming Content Plan & 5 Ready-to-Shoot Reels</strong>
+                <span>Writing 5 specific, grounded Reel scripts with visual directions & CTAs</span>
               </div>
             </div>
           </div>
@@ -2587,6 +2663,36 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
               >
                 📋 Copy Full Audit
               </button>
+              {hasHookDeepDive && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm btn-action-highlight"
+                  onClick={handleCopyHookDeepDive}
+                  title="Copy Stage 3 Outlier Hook Analysis & Formulas"
+                >
+                  🪝 Copy Hook Analysis
+                </button>
+              )}
+              {hasFeedback && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm btn-action-highlight"
+                  onClick={handleCopyFeedback}
+                  title="Copy Stage 4 Constructive Audit & Roadmap"
+                >
+                  🛠️ Copy Constructive Feedback
+                </button>
+              )}
+              {hasTrends && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm btn-action-highlight"
+                  onClick={handleCopyTrends}
+                  title="Copy Stage 5 Niche Trends & Influences"
+                >
+                  📈 Copy Niche Trends
+                </button>
+              )}
               {hasReelPlan && (
                 <button
                   type="button"
@@ -2619,13 +2725,15 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
           {/* Stage Filter Tabs */}
           <div className="stage-filter-tabs">
             {[
-              { id: 'all', label: '📋 All 5 Stages' },
+              { id: 'all', label: '📋 All 7 Stages' },
               { id: 'summary', label: '⚡ Executive Summary' },
               { id: 'stage1', label: '📊 1. Formats & Engagement' },
               { id: 'stage2', label: '🔥 2. Top Posts & Patterns' },
-              { id: 'stage3', label: '⚖️ 3. Good & Bad Audit' },
-              { id: 'stage4', label: '🎯 4. Niche Content Gaps' },
-              { id: 'stage5', label: '🚀 5. Outperforming 5-Reel Plan' },
+              { id: 'stage3', label: '🪝 3. Outlier Hook Deep-Dive' },
+              { id: 'stage4', label: '🛠️ 4. Constructive Feedback & Roadmap' },
+              { id: 'stage5', label: '📈 5. Niche Trends & Influences' },
+              { id: 'stage6', label: '🎯 6. Niche Content Gaps' },
+              { id: 'stage7', label: '🚀 7. Outperforming 5-Reel Plan' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -3248,6 +3356,7 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
   // Auto-Discovery State
   const [discoveringAccounts, setDiscoveringAccounts] = useState(false);
   const [discoveredAccounts, setDiscoveredAccounts] = useState([]);
+  const [resolvedNiche, setResolvedNiche] = useState('');
   const [discoveryError, setDiscoveryError] = useState('');
   const [importedHandles, setImportedHandles] = useState([]);
 
@@ -3382,7 +3491,15 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
       }
 
       setDiscoveredAccounts(foundList);
-      notifyCopy(`✨ Discovered ${foundList.length} verified accounts in ${trimmedNiche} (${getActiveLocationLabel()})!`);
+      if (data.resolved_niche) {
+        setResolvedNiche(data.resolved_niche);
+      } else {
+        setResolvedNiche('');
+      }
+      const labelNiche = data.resolved_niche && data.resolved_niche.toLowerCase() !== trimmedNiche.toLowerCase()
+        ? `${data.resolved_niche} (auto-corrected from "${trimmedNiche}")`
+        : trimmedNiche;
+      notifyCopy(`✨ Discovered ${foundList.length} verified accounts for ${labelNiche} (${getActiveLocationLabel()})!`);
     } catch (err) {
       setDiscoveryError(err.message || 'Error discovering accounts.');
     } finally {
@@ -3747,6 +3864,20 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                     <h4 className="discovered-title">
                       High-Performing Accounts in <em>{niche}</em> • <span className="location-highlight">{getActiveLocationLabel()}</span> ({discoveredAccounts.length})
                     </h4>
+                    {resolvedNiche && resolvedNiche.toLowerCase() !== niche.trim().toLowerCase() && (
+                      <div className="resolved-niche-pill" title="Automatically inferred and auto-corrected designation for optimal competitor discovery">
+                        <span className="pill-icon">✨</span>
+                        <span className="pill-text">Designation Auto-Corrected: <strong>{resolvedNiche}</strong></span>
+                        <button
+                          type="button"
+                          className="btn-apply-resolved"
+                          onClick={() => setNiche(resolvedNiche)}
+                          title="Apply this exact professional designation to the search input"
+                        >
+                          Apply to search
+                        </button>
+                      </div>
+                    )}
                     <p className="discovered-subtitle">
                       Scouted via verified Instagram presence, viral reels velocity & funnel architecture. Add individual creators or import all into your cohort data below.
                     </p>
@@ -3764,7 +3895,10 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                   <button
                     type="button"
                     className="btn-clear-discovered"
-                    onClick={() => setDiscoveredAccounts([])}
+                    onClick={() => {
+                      setDiscoveredAccounts([]);
+                      setResolvedNiche('');
+                    }}
                     title="Dismiss discovered accounts"
                   >
                     ✕ Dismiss

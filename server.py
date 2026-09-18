@@ -9,7 +9,9 @@ import base64
 import csv
 import json
 import os
+import re
 import sys
+import urllib.parse
 from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse
@@ -158,10 +160,10 @@ everything."""
 INSTA_AUDIT_SYSTEM_INSTRUCTION = """You are an elite Instagram growth strategist, direct-response creative director, and competitive intelligence analyst.
 Given an Instagram profile URL or handle, conduct a deep, rigorous competitive audit by searching Google, public Instagram discussions, creator benchmarks, and social data.
 
-Analyze the profile thoroughly and structure your response into EXACTLY 5 distinct numbered stages, followed by an Executive Summary:
+Analyze the profile thoroughly and structure your response into EXACTLY 7 distinct numbered stages, followed by an Executive Summary:
 
 =====================================================
-STAGE 1 — CONTENT FORMATS & ENGAGEMENT ANALYSIS
+STAGE 1 — CONTENT FORMATS & ENGAGEMENT SIGNALS
 =====================================================
 - Identify all content formats used (Reels, Carousels, Static image posts, Stories/Highlights).
 - Approximate format distribution (e.g. 70% Reels, 20% Carousels, 10% Static).
@@ -179,23 +181,52 @@ Identify 5 to 10 of their highest-performing recent posts/reels and deconstruct 
 - Thumbnail / Cover Style: Visual contrast, text font, facial expressions, and feed aesthetic consistency.
 
 =====================================================
-STAGE 3 — THE GOOD & THE BAD AUDIT
+STAGE 3 — OUTLIER HOOK ANALYSIS & PROVEN FORMULAS
 =====================================================
-Provide an honest, unvarnished diagnostic breakdown:
-1. WHAT'S WORKING WELL (The "Good"):
-   - Clear positioning, authentic creator presence, strong visual identity, social proof, high comment velocity, or authority signals.
-2. WHAT'S WEAK OR INCONSISTENT (The "Bad"):
-   - Inconsistent posting cadence, generic/buried captions, weak or missing CTAs, lack of community replies, low engagement relative to follower count, or lack of clear lead funnel.
+Perform a dedicated deep-dive into the #1 highest-performing hook on this profile:
+1. Exact Winning Hook: Quote the exact opening line / 0-3s text overlay that drove the best performance or outlier view velocity.
+2. Hook Category & Pattern Name: (e.g., Contrarian Pattern Interrupt, Curiosity Loop / Open Loop, Negative Constraint "Stop Doing This", Proof-First Metric Callout, Direct Persona Challenge, Secret Insider Reveal).
+3. Why It Worked (Psychological Trigger): Explain the cognitive driver (e.g., loss aversion, dopamine cliffhanger, status signaling, cognitive dissonance).
+4. Swipeable Hook Formula: Provide a plug-and-play formula template (e.g., "The [Common Belief] Is Dead: Why [Target Audience] Should Do [Alternative] Instead").
+5. Two Ready-to-Use Adaptations: Provide 2 practical adaptations of this formula tailored for this niche.
 
 =====================================================
-STAGE 4 — NICHE CONTENT GAPS & COMPETITOR ADVANTAGES
+STAGE 4 — CONSTRUCTIVE AUDIT & ACTIONABLE IMPROVEMENT ROADMAP
+=====================================================
+Provide an honest, unvarnished diagnostic breakdown of what is NOT working on the profile, paired with concrete steps to fix it:
+1. WHAT ISN'T WORKING (Detailed Weakness Diagnostic):
+   - Profile Bio & Link-in-Bio: Friction in the funnel, unclear value proposition, or buried links.
+   - 0-3s Video Drop-offs: Slow intro pacing, talking-head delays, lack of visual pattern interrupts.
+   - Caption & CTA Weaknesses: Vague calls-to-action, missed comment keyword triggers (ManyChat), or lack of saves/shares intent.
+   - Posting Cadence & Consistency: Gaps in posting or format fatigue.
+   - Follower-to-Engagement Ratio: Any signs of vanity follower inflate or low comment depth.
+2. ACTIONABLE IMPROVEMENT ROADMAP (Prioritized Next Steps):
+   - Immediate Fix #1 (Day 1-7): Concrete change to Bio, Link, or Pinned Posts.
+   - Content Optimization #2 (Week 2): Specific structural change to video pacing or editing.
+   - Conversion & Retention Fix #3 (Week 3-4): Better CTA mechanism or DM automation funnel.
+
+=====================================================
+STAGE 5 — NICHE TRENDS & COMPETITIVE INFLUENCES
+=====================================================
+Analyze the current 2026 competitive landscape surrounding this profile:
+1. Current Macro & Micro Niche Trends:
+   - What video styles, pacing rhythms, or audio treatments are going viral in this specific niche right now?
+   - Emerging sub-topics gaining rapid traction among this audience.
+2. Accounts & Strategies They Follow / Model:
+   - Identify the prominent creators, authorities, or competitor accounts this profile appears to be modeling, collaborating with, or competing directly against.
+   - Strategies they have borrowed from others (and whether they execute them well or poorly).
+3. Untapped Niche Waves:
+   - 2-3 rising trends in this category that this profile has NOT yet adopted, which you can capitalize on first.
+
+=====================================================
+STAGE 6 — NICHE CONTENT GAPS & COMPETITOR ADVANTAGES
 =====================================================
 - Uncover specific topics, sub-themes, and questions in their niche that competitors or viral creators cover, but this profile completely ignores.
 - Identify underserved audience segments or pain points left on the table.
 - Identify format gaps (e.g., lack of green-screen case studies, lack of step-by-step swipe carousels, lack of teardowns or behind-the-scenes failures).
 
 =====================================================
-STAGE 5 — OUTPERFORMING CONTENT PLAN & SPECIFIC REEL IDEAS
+STAGE 7 — OUTPERFORMING CONTENT PLAN & 5 READY-TO-SHOOT REEL IDEAS
 =====================================================
 Deliver an actionable, ready-to-execute content strategy to build a page that out-competes them in this exact niche.
 CRITICAL: Ground every suggestion in their actual top videos — do NOT give generic social media advice!
@@ -379,10 +410,16 @@ CRITICAL VERIFICATION RULES FOR REAL INSTAGRAM PROFILES (PREVENTING BROKEN 404 L
    - "posting_frequency": Estimated publishing cadence (e.g., "1 Reel/day", "4-5 posts/week").
    - "growth_secret": 1-2 sentences on their specific content hook, visual format, or pacing edge.
    - "top_hooks": Array of 2 to 3 real or representative viral hook opening lines from their high-performing posts.
+7. DESIGNATION AUTOCORRECT & INTELLIGENT INFERENCE:
+   - If the user provides an informal, colloquial, vague, abbreviated, or misspelled niche/designation (for example: "coder", "doc", "gym guy", "skin", "saas sales", "real estate guy", "dropship", "lawyer", "dentist"):
+     Automatically infer and auto-correct it into the most accurate, high-intent, professional commercial industry category (e.g., "coder" -> "Software Engineering & Developer Education", "doc" -> "Medical Practice & Health Education", "gym guy" -> "Fitness Coaching & Strength Training", "skin" -> "Aesthetic Skincare & Dermatology").
+   - Search for top accounts matching this refined professional designation.
+   - Return "resolved_niche" in the output JSON with this inferred/auto-corrected professional designation. If the input was already a complete/formal designation, set "resolved_niche" to match it.
 
 Output your response strictly inside a ```json ... ``` code block conforming to this schema:
 {
   "niche": "Target Niche",
+  "resolved_niche": "Auto-corrected or inferred professional industry designation",
   "location": "Target Location",
   "total_found": 8,
   "accounts": [
@@ -879,13 +916,16 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
             user_query = (
                 f"Analyze this Instagram profile: {clean_url} (Username / Handle: {clean_handle})\n\n"
-                "Search Google, public Instagram discussions, reels indexes, and social databases to perform a complete 5-stage competitive audit strictly following these requirements:\n"
-                "1. Identify what content formats they use (reels, carousels, static posts) and which ones seem to perform best based on visible engagement signals.\n"
-                "2. Pull out 5-10 of their best-performing recent posts/reels and identify common patterns: hooks, topics, tone, posting style, thumbnail/cover style.\n"
-                "3. Tell me what's working well (the 'good') and what's weak or inconsistent (the 'bad') — e.g. posting frequency, caption quality, niche focus, engagement-to-follower ratio if visible.\n"
-                "4. Identify content gaps: topics or formats in their niche that they haven't covered but competitors/similar accounts have.\n"
-                "5. Based on all of the above, suggest a content plan/direction I could use to build a similar or better-performing page in the same niche — specific reel ideas, formats, and posting cadence, not generic advice.\n\n"
-                "Use their actual top videos as reference points when making suggestions — ground every recommendation in something specific you found on their profile, not generic social media tips."
+                "Search Google, public Instagram discussions, reels indexes, creator benchmarks, and social databases to perform a rigorous 7-stage competitive audit following all instructions:\n"
+                "Stage 1: Content Formats & Engagement Signals (distribution, best performing format, neglected formats).\n"
+                "Stage 2: 5-10 Top Performing Posts & Patterns (0-3s hooks, core problem themes, tone/delivery, editing style, covers).\n"
+                "Stage 3: Outlier Hook Analysis & Proven Formulas (exact winning hook quoted, hook category, psychological trigger, swipeable formula template, and 2 ready-to-use adaptations).\n"
+                "Stage 4: Constructive Audit & Actionable Improvement Roadmap (unvarnished diagnostic on what ISN'T working: bio/funnel friction, 0-3s video drop-offs, weak CTAs, cadence, follower-to-engagement ratio + prioritized actionable fix roadmap).\n"
+                "Stage 5: Niche Trends & Competitive Influences (macro/micro 2026 trends, accounts/creators they model or follow, borrowed strategies, and untapped niche waves).\n"
+                "Stage 6: Niche Content Gaps & Competitor Advantages (untouched topics, underserved audience segments, format gaps).\n"
+                "Stage 7: Outperforming Content Plan & 5 Ready-to-Shoot Reel Ideas (positioning, posting cadence, and 5 complete ready-to-shoot reels with exact hooks, visual directions, 3 story beats, and CTAs grounded in their top videos).\n"
+                "End with the punchy 1-paragraph Executive Summary.\n\n"
+                "Use their actual top videos and authentic profile metrics as reference points — ground every observation and formula in real data, avoiding generic advice."
             )
 
             try:
@@ -1031,20 +1071,18 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
             location_str = ", ".join(location_parts) if location_parts else "Global / Worldwide"
 
-            user_query = f"TARGET NICHE / INDUSTRY: {niche}\n"
-            user_query += f"TARGET GEOGRAPHY / LOCATION: {location_str}\n"
-            if goal:
-                user_query += f"STRATEGIC GOAL: {goal}\n"
-            user_query = f"TARGET NICHE / INDUSTRY: {niche}\n"
+            user_query = f"TARGET NICHE / INDUSTRY INPUT: {niche}\n"
             user_query += f"TARGET GEOGRAPHY / LOCATION: {location_str}\n"
             if goal:
                 user_query += f"STRATEGIC GOAL: {goal}\n"
             user_query += (
-                f"Execute targeted Google Search queries to discover 6 to 10 REAL, LIVE, ACTIVE Instagram accounts:\n"
-                f"1. Search 'site:instagram.com {niche} {location_str}' and 'top instagram creators in {niche} {location_str}'.\n"
-                f"2. Extract the exact public handle from the real 'instagram.com/<handle>' URLs in search results.\n"
+                f"INSTRUCTIONS:\n"
+                f"1. Evaluate the TARGET NICHE / INDUSTRY: '{niche}'. If it is informal, colloquial, abbreviated, or misspelled (e.g. 'coder', 'doc', 'gym guy', 'skin', 'saas sales'), auto-correct or infer the closest high-intent professional commercial designation (e.g. 'Software Engineering & Developer Education') and set 'resolved_niche' to it. If it is already specific, keep 'resolved_niche' identical.\n"
+                f"2. Execute targeted Google Search queries to discover 6 to 10 REAL, LIVE, ACTIVE Instagram accounts in this niche for {location_str}:\n"
+                f"   - Search 'site:instagram.com {niche} {location_str}' and 'top instagram creators in {niche} {location_str}'.\n"
+                f"   - Extract the exact public handle from the real 'instagram.com/<handle>' URLs in search results.\n"
                 f"3. CRITICAL ANTI-404 INSTRUCTION: Do NOT guess handles, and do NOT fabricate suffixes like '_official', '_app', '_hq', '_co' unless that is the exact live handle on Instagram. If an entity only exists on LinkedIn or Twitter, omit them and choose active Instagram creators.\n"
-                f"4. Format the output strictly inside a ```json ... ``` code block matching the schema."
+                f"4. Format the output strictly inside a ```json ... ``` code block matching the schema with 'resolved_niche'."
             )
 
             try:
@@ -1176,9 +1214,11 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                     except Exception as e_fb:
                         print(f"Fallback parse notice: {e_fb}")
 
+                resolved_niche = (parsed_data.get("resolved_niche") if isinstance(parsed_data, dict) else None) or niche
                 self._send_json(200, {
                     "success": True,
                     "niche": niche,
+                    "resolved_niche": resolved_niche,
                     "location": location_str,
                     "accounts": clean_accounts,
                     "model": used_model,

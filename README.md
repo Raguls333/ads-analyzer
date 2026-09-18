@@ -18,14 +18,22 @@ Available as both a **Sleek React Web Application** (with instant `Ctrl+V` clipb
    - **4-Stage Pipeline**: Market Gap Discovery (Reddit/Forums) → Alex Hormozi Offer Engineering → Direct-Response Creative (Visual Prompts & Video Scripts) → Meta Ads Campaign Architecture.
    - Multi-language script generation (English, Tamil, Tanglish, Hindi, Hinglish).
 
-3. **Instagram Profile Auditor**:
-   - 5-stage competitive profile teardown from a single Instagram handle/URL.
-   - Formats distribution, 5-10 top post hook patterns, the Good vs Bad diagnostic, niche content gaps, and 5 ready-to-shoot Reel ideas.
+3. **Instagram Profile Auditor (7-Stage Deep Audit)**:
+   - Complete competitive profile teardown from a single Instagram handle or URL.
+   - **Stage 1: Content Formats & Engagement Signals** (distribution across Reels, Carousels, Static, and view/like ratios).
+   - **Stage 2: 5-10 Top Performing Posts & Hook Patterns** (0-3s visual hooks, pacing, tone, and thumbnail contrast).
+   - **Stage 3: Outlier Hook Analysis & Proven Formulas** (exact #1 performing hook, copywriting category, cognitive psychological trigger, swipeable formula template, and 2 ready-to-use adaptations).
+   - **Stage 4: Constructive Audit & Actionable Improvement Roadmap** (unvarnished diagnostic on what isn't working: bio/funnel friction, 0-3s video drop-offs, weak CTAs, cadence, plus a prioritized Day 1-30 fix roadmap).
+   - **Stage 5: Niche Trends & Competitive Influences** (current 2026 macro/micro trends, prominent accounts & strategies they model or follow, and untapped waves).
+   - **Stage 6: Niche Content Gaps & Competitor Advantages** (high-converting topics competitors cover that this account neglects).
+   - **Stage 7: Outperforming Content Plan & 5 Ready-to-Shoot Reels** (weekly posting cadence and 5 complete Reel scripts with visual directions, story beats, and CTAs).
+   - 1-Click Quick Copy buttons for Hook Deep-Dive, Constructive Feedback, Niche Trends, 5 Reel Ideas, and Full Audit.
 
 4. **Instagram Niche Competitive Intelligence (Multi-Account Cohort Intel)**:
-   - **Auto-Discovery of High-Performing Accounts with Location Narrowing**: Type any niche keyword and narrow down by **Country** (e.g. United States, India, United Kingdom, Canada, Australia, UAE, etc.) and **State / Region** (e.g. California, New York, Tamil Nadu, Maharashtra, Ontario, London, Dubai) to discover 6–10 verified, live, high-performing accounts.
+   - **Auto-Discovery with Intelligent Designation Autocorrect**: Enter informal, colloquial, or abbreviated designations (e.g. *"coder"*, *"doc"*, *"gym guy"*, *"skin"*, *"saas sales"*) — the system automatically infers and autocorrects the query into the closest high-intent professional industry category, showing an interactive auto-corrected badge with 1-click apply.
+   - **Location Narrowing**: Narrow down by **Country** (United States, India, United Kingdom, Canada, Australia, UAE, Germany, France, etc.) and **State / Region** (California, New York, Tamil Nadu, Maharashtra, Ontario, London, Dubai, etc.) to discover 6–10 verified, live, high-performing accounts.
    - **Verified Live Profile Links**: Direct clickable links to `instagram.com/<handle>/` to verify authentic creator accounts, follower counts, growth secrets, and top hook quotes.
-   - **1-Click Import**: Instantly import discovered accounts into your multi-account cohort teardown or jump directly into a full 5-stage **Profile Audit**.
+   - **1-Click Import**: Instantly import discovered accounts into your multi-account cohort teardown or jump directly into a full 7-stage **Profile Audit**.
    - **Stage 1: Account Tiers & Optimization Matrix** (grouping by reach, trust, sales, community vs vanity metrics).
    - **Stage 2: Cross-Account Content Pillar Map** (identifying recurring themes and engagement correlations).
    - **Stage 3: Top 10 Hook Teardowns & Formulas** (naming psychological copywriting patterns and swipe formulas).
