@@ -3072,6 +3072,161 @@ function FormattedNicheIntelMarkdown({ content, filterStage, onCopy }) {
   return elements;
 }
 
+const LOCATION_CONFIG = {
+  Global: {
+    name: '🌍 Global / Worldwide (All Locations)',
+    states: ['All Regions / Worldwide'],
+  },
+  'United States': {
+    name: '🇺🇸 United States',
+    states: [
+      'All States (Nationwide)',
+      'California',
+      'New York',
+      'Texas',
+      'Florida',
+      'Illinois',
+      'Washington',
+      'Georgia',
+      'North Carolina',
+      'Massachusetts',
+      'Colorado',
+      'Pennsylvania',
+      'Arizona',
+      'Ohio',
+      'Michigan',
+      'New Jersey',
+      'Virginia',
+      'Utah',
+      'Oregon',
+      'Nevada',
+      'Tennessee',
+    ],
+  },
+  India: {
+    name: '🇮🇳 India',
+    states: [
+      'All States / Nationwide',
+      'Maharashtra (Mumbai / Pune)',
+      'Karnataka (Bengaluru)',
+      'Delhi / NCR',
+      'Tamil Nadu (Chennai)',
+      'Telangana (Hyderabad)',
+      'Gujarat (Ahmedabad / Surat)',
+      'Uttar Pradesh',
+      'West Bengal (Kolkata)',
+      'Kerala (Kochi / Trivandrum)',
+      'Punjab (Chandigarh)',
+      'Rajasthan (Jaipur)',
+      'Haryana (Gurugram)',
+      'Goa',
+      'Madhya Pradesh (Indore)',
+      'Andhra Pradesh',
+    ],
+  },
+  'United Kingdom': {
+    name: '🇬🇧 United Kingdom',
+    states: [
+      'All Regions',
+      'Greater London',
+      'South East England',
+      'North West England (Manchester)',
+      'West Midlands (Birmingham)',
+      'Yorkshire & Humber (Leeds)',
+      'Scotland (Edinburgh / Glasgow)',
+      'South West England (Bristol)',
+      'East of England (Cambridge)',
+      'Wales (Cardiff)',
+      'Northern Ireland (Belfast)',
+    ],
+  },
+  Canada: {
+    name: '🇨🇦 Canada',
+    states: [
+      'All Provinces',
+      'Ontario (Toronto / Ottawa)',
+      'British Columbia (Vancouver)',
+      'Quebec (Montreal)',
+      'Alberta (Calgary / Edmonton)',
+      'Manitoba (Winnipeg)',
+      'Nova Scotia (Halifax)',
+      'Saskatchewan',
+    ],
+  },
+  Australia: {
+    name: '🇦🇺 Australia',
+    states: [
+      'All States',
+      'New South Wales (Sydney)',
+      'Victoria (Melbourne)',
+      'Queensland (Brisbane / Gold Coast)',
+      'Western Australia (Perth)',
+      'South Australia (Adelaide)',
+      'Australian Capital Territory (Canberra)',
+    ],
+  },
+  'United Arab Emirates': {
+    name: '🇦🇪 United Arab Emirates (UAE)',
+    states: [
+      'All Emirates',
+      'Dubai',
+      'Abu Dhabi',
+      'Sharjah',
+      'Ajman',
+      'Ras Al Khaimah',
+    ],
+  },
+  Germany: {
+    name: '🇩🇪 Germany',
+    states: [
+      'All States',
+      'Berlin',
+      'Bavaria (Munich)',
+      'North Rhine-Westphalia (Cologne / Düsseldorf)',
+      'Baden-Württemberg (Stuttgart)',
+      'Hesse (Frankfurt)',
+      'Hamburg',
+    ],
+  },
+  France: {
+    name: '🇫🇷 France',
+    states: [
+      'All Regions',
+      'Île-de-France (Paris)',
+      'Auvergne-Rhône-Alpes (Lyon)',
+      'Provence-Alpes-Côte d\'Azur (Marseille / Nice)',
+      'Occitanie (Toulouse)',
+      'Nouvelle-Aquitaine (Bordeaux)',
+    ],
+  },
+  Singapore: {
+    name: '🇸🇬 Singapore',
+    states: [
+      'Singapore (All Areas)',
+      'Central Region / CBD',
+      'East Region',
+      'West Region',
+      'North Region',
+    ],
+  },
+  Brazil: {
+    name: '🇧🇷 Brazil',
+    states: [
+      'All States',
+      'São Paulo',
+      'Rio de Janeiro',
+      'Minas Gerais',
+      'Paraná (Curitiba)',
+      'Rio Grande do Sul (Porto Alegre)',
+      'Federal District (Brasília)',
+    ],
+  },
+  Custom: {
+    name: '🌐 Other Country / Custom City',
+    states: [],
+  },
+};
+
 function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal, onSwitchToProfileAudit }) {
   const [niche, setNiche] = useState('B2B SaaS & AI Productivity');
   const [goal, setGoal] = useState('Launch a new creator-led SaaS page, find high-intent content gaps & drive free trials');
@@ -3083,6 +3238,12 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
   const [intelMeta, setIntelMeta] = useState(null);
   const [activeStageFilter, setActiveStageFilter] = useState('all');
   const [copyNotice, setCopyNotice] = useState('');
+
+  // Location Narrowing State
+  const [selectedCountry, setSelectedCountry] = useState('Global');
+  const [selectedState, setSelectedState] = useState('All Regions / Worldwide');
+  const [customCountry, setCustomCountry] = useState('');
+  const [customState, setCustomState] = useState('');
 
   // Auto-Discovery State
   const [discoveringAccounts, setDiscoveringAccounts] = useState(false);
@@ -3104,6 +3265,29 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
     setTimeout(() => setCopyNotice(''), 3000);
   };
 
+  const handleCountryChange = (e) => {
+    const newCountry = e.target.value;
+    setSelectedCountry(newCountry);
+    const config = LOCATION_CONFIG[newCountry];
+    if (config && config.states && config.states.length > 0) {
+      setSelectedState(config.states[0]);
+    } else {
+      setSelectedState('');
+    }
+  };
+
+  const getActiveLocationLabel = () => {
+    if (selectedCountry === 'Custom') {
+      const parts = [customState.trim(), customCountry.trim()].filter(Boolean);
+      return parts.length > 0 ? parts.join(', ') : 'Custom Location';
+    }
+    if (selectedCountry === 'Global') {
+      return 'Global / Worldwide';
+    }
+    const stateClean = selectedState && !selectedState.startsWith('All ') ? selectedState.split(' (')[0] : '';
+    return stateClean ? `${stateClean}, ${selectedCountry}` : selectedCountry;
+  };
+
   const serializeAccountsToCohortData = (accounts) => {
     return accounts.map((acc, idx) => {
       const hooks = Array.isArray(acc.top_hooks) ? acc.top_hooks : [];
@@ -3112,6 +3296,7 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
 - Handle: ${acc.handle || '@creator'}
 - Name: ${acc.name || 'Creator'}
 - Follower Count: ${acc.follower_count || 'Unknown'}
+- Location: ${acc.location || getActiveLocationLabel()}
 - Tier: ${acc.tier || 'Competitor'}
 - Bio: ${acc.bio || 'N/A'}
 - Link-in-Bio: ${acc.link_in_bio || 'N/A'}
@@ -3134,10 +3319,17 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
     setDiscoveryError('');
     setDiscoveringAccounts(true);
 
+    const effectiveCountry = selectedCountry === 'Custom' ? customCountry.trim() : selectedCountry;
+    const effectiveState = selectedCountry === 'Custom' ? customState.trim() : selectedState;
+    const customLocStr = selectedCountry === 'Custom' ? [customState.trim(), customCountry.trim()].filter(Boolean).join(', ') : '';
+
     const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
     const payload = {
       niche: trimmedNiche,
       goal: goal.trim() || 'Find high-performing accounts and content gaps',
+      country: effectiveCountry,
+      state: effectiveState,
+      custom_location: customLocStr,
     };
     if (effectiveKey) payload.apiKey = effectiveKey;
 
@@ -3158,11 +3350,11 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
 
       const foundList = Array.isArray(data.accounts) ? data.accounts : [];
       if (foundList.length === 0) {
-        throw new Error(`No accounts found for "${trimmedNiche}". Try using broader niche keywords.`);
+        throw new Error(`No accounts found for "${trimmedNiche}" in ${getActiveLocationLabel()}. Try using broader niche keywords or a wider location.`);
       }
 
       setDiscoveredAccounts(foundList);
-      notifyCopy(`✨ Discovered ${foundList.length} high-performing accounts in ${trimmedNiche}!`);
+      notifyCopy(`✨ Discovered ${foundList.length} verified accounts in ${trimmedNiche} (${getActiveLocationLabel()})!`);
     } catch (err) {
       setDiscoveryError(err.message || 'Error discovering accounts.');
     } finally {
@@ -3371,21 +3563,22 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
 
       {/* Input Form Card */}
       <section className="card strategy-form-card niche-form-card">
-        {/* Niche Input */}
+        {/* Niche Input & Location Narrowing */}
         <div className="form-group">
           <div className="label-with-hint">
             <label className="input-label" htmlFor="nicheInput">
               <strong>Target Niche / Industry *</strong>
             </label>
-            <span className="label-hint">What market are you competing in?</span>
+            <span className="label-hint">What market & location are you targeting?</span>
           </div>
 
+          {/* Combined Search Bar */}
           <div className="niche-search-input-group">
             <input
               id="nicheInput"
               type="text"
               className="url-field niche-text-field"
-              placeholder="e.g. B2B SaaS / AI Productivity or Fitness for Founders"
+              placeholder="e.g. B2B SaaS, Fitness Coaching for Founders, AI Video Editing, Skincare"
               value={niche}
               onChange={(e) => setNiche(e.target.value)}
               onKeyDown={(e) => {
@@ -3400,12 +3593,12 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
               className="btn-discover-accounts"
               onClick={handleDiscoverAccounts}
               disabled={discoveringAccounts || !niche.trim()}
-              title="Search Instagram creator databases for high-performing competitor accounts in this niche"
+              title={`Auto-discover real verified Instagram accounts in ${niche} (${getActiveLocationLabel()})`}
             >
               {discoveringAccounts ? (
                 <>
                   <span className="spinner"></span>
-                  <span>Scouting Creators...</span>
+                  <span>Scouting Verified Creators...</span>
                 </>
               ) : (
                 <>
@@ -3413,6 +3606,73 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                 </>
               )}
             </button>
+          </div>
+
+          {/* Location Narrowing Toolbar (Country & State / Region) */}
+          <div className="niche-location-toolbar">
+            <div className="location-picker-group">
+              <div className="location-select-field">
+                <label htmlFor="countrySelect" className="location-field-label">🌍 Country / Geography</label>
+                <select
+                  id="countrySelect"
+                  className="location-select"
+                  value={selectedCountry}
+                  onChange={handleCountryChange}
+                >
+                  {Object.entries(LOCATION_CONFIG).map(([key, config]) => (
+                    <option key={key} value={key}>{config.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedCountry !== 'Custom' && LOCATION_CONFIG[selectedCountry]?.states?.length > 0 && (
+                <div className="location-select-field">
+                  <label htmlFor="stateSelect" className="location-field-label">📍 State / Region</label>
+                  <select
+                    id="stateSelect"
+                    className="location-select"
+                    value={selectedState}
+                    onChange={(e) => setSelectedState(e.target.value)}
+                  >
+                    {LOCATION_CONFIG[selectedCountry].states.map((st, sIdx) => (
+                      <option key={sIdx} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {selectedCountry === 'Custom' && (
+                <div className="location-custom-inputs">
+                  <div className="location-select-field">
+                    <label htmlFor="customCountryInput" className="location-field-label">🌍 Country Name</label>
+                    <input
+                      id="customCountryInput"
+                      type="text"
+                      className="location-text-input"
+                      placeholder="e.g. Japan, Spain, South Africa"
+                      value={customCountry}
+                      onChange={(e) => setCustomCountry(e.target.value)}
+                    />
+                  </div>
+                  <div className="location-select-field">
+                    <label htmlFor="customStateInput" className="location-field-label">📍 State, Province, or City</label>
+                    <input
+                      id="customStateInput"
+                      type="text"
+                      className="location-text-input"
+                      placeholder="e.g. Tokyo, Madrid, Cape Town"
+                      value={customState}
+                      onChange={(e) => setCustomState(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="location-active-badge">
+              <span className="loc-dot"></span>
+              <span>Narrowed Target: <strong>{getActiveLocationLabel()}</strong></span>
+            </div>
           </div>
 
           <div className="strategy-quick-chips">
@@ -3440,8 +3700,8 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
             <div className="discovery-loading-banner">
               <span className="spinner"></span>
               <div className="discovery-loading-text">
-                <strong>Searching live Instagram creator benchmarks for "{niche}"...</strong>
-                <p>Scouting high-engagement leader accounts, breakout challengers, and high-converting funnels.</p>
+                <strong>Searching live Instagram creator benchmarks for "{niche}" in {getActiveLocationLabel()}...</strong>
+                <p>Scouting verified creator accounts, viral reel velocity, and authentic profiles via live web search.</p>
               </div>
             </div>
           )}
@@ -3457,10 +3717,10 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                   <span className="discovered-sparkle-icon">✨</span>
                   <div>
                     <h4 className="discovered-title">
-                      High-Performing Accounts Discovered in <em>{niche}</em> ({discoveredAccounts.length})
+                      High-Performing Accounts in <em>{niche}</em> • <span className="location-highlight">{getActiveLocationLabel()}</span> ({discoveredAccounts.length})
                     </h4>
                     <p className="discovered-subtitle">
-                      Scouted via viral reels velocity, hook retention & funnel architecture. Add individual creators or import all into your cohort data below.
+                      Scouted via verified Instagram presence, viral reels velocity & funnel architecture. Add individual creators or import all into your cohort data below.
                     </p>
                   </div>
                 </div>
@@ -3487,15 +3747,17 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
               <div className="discovered-accounts-grid">
                 {discoveredAccounts.map((account, aIdx) => {
                   const isImported = importedHandles.includes(account.handle);
+                  const igUrl = account.instagram_url || `https://www.instagram.com/${(account.handle || '').replace(/^@/, '')}/`;
                   return (
                     <div key={aIdx} className="discovered-account-card">
                       <div className="card-top-row">
                         <div className="creator-identity">
                           <a
-                            href={`https://www.instagram.com/${(account.handle || '').replace(/^@/, '')}/`}
+                            href={igUrl}
                             target="_blank"
                             rel="noreferrer"
                             className="creator-handle-link"
+                            title="Open live verified profile on Instagram"
                           >
                             {account.handle} ↗
                           </a>
@@ -3510,6 +3772,7 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
 
                       <div className="card-metrics-row">
                         <span className="metric-pill">👥 {account.follower_count || 'N/A'}</span>
+                        <span className="metric-pill location-pill">📍 {account.location || getActiveLocationLabel()}</span>
                         <span className="metric-pill">📊 {account.primary_format || 'Reels'}</span>
                         <span className="metric-pill">🔥 {account.rough_engagement || 'High'}</span>
                       </div>
@@ -3552,12 +3815,27 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                         >
                           {isImported ? '✓ Added to Cohort' : '➕ Add to Cohort'}
                         </button>
+                        <a
+                          href={igUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-view-ig"
+                          title="Open live Instagram profile in new tab"
+                        >
+                          📸 View on IG ↗
+                        </a>
                         <button
                           type="button"
                           className="btn-audit-account"
-                          onClick={() => onSwitchToProfileAudit && onSwitchToProfileAudit(account.handle)}
+                          onClick={() => {
+                            sessionStorage.setItem('ad_insta_prefill_handle', account.handle);
+                            if (onSwitchToProfileAudit) {
+                              onSwitchToProfileAudit(account.handle);
+                            }
+                          }}
+                          title={`Run full 5-stage profile teardown on ${account.handle}`}
                         >
-                          📸 Full Profile Audit ↗
+                          ⚡ Full Audit ↗
                         </button>
                       </div>
                     </div>

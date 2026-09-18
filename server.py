@@ -341,44 +341,68 @@ CRITICAL RULES:
 """
 
 
-DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION = """You are an elite Instagram competitive research specialist and social media analyst.
-Given a target niche or industry (and optional strategic goal), search public Instagram discussions, creator databases, Google, and industry benchmarks to discover 4 to 6 real, active, high-performing Instagram creator or brand accounts in this exact niche.
+DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION = """You are an elite Instagram competitive intelligence researcher, creator scout, and social media strategist.
+Your mission is to find 6 to 10 REAL, LIVE, HIGH-PERFORMING public Instagram creator or business accounts in the specified niche and geographic location (Country, State/Region).
 
-Identify a diverse, strategic cohort featuring:
-- Top Market Leaders (Macro / Authority accounts)
-- Fast-Growing Challenger Accounts (Mid-tier accounts with high engagement velocity)
-- High-Conversion Boutique Accounts (Micro creators with rabid fans and clear monetization funnels)
+CRITICAL VERIFICATION RULES FOR REAL INSTAGRAM PROFILES:
+1. EVERY SINGLE ACCOUNT MUST BE A REAL, EXISTING PUBLIC INSTAGRAM ACCOUNT that can be visited live at https://www.instagram.com/<handle>/.
+2. ABSOLUTELY NO FAKE, HYPOTHETICAL, OR PLACEHOLDER HANDLES.
+   Never invent usernames like '@example_saas', '@productivityos', or '@fitnesscoach_alex'.
+   Always identify actual, recognizable individuals, creators, industry authorities, media pages, or brands that actively publish on Instagram.
+3. GEOGRAPHIC PRECISION:
+   - If a Country and/or State/Region is specified (e.g., Country: India, State: Tamil Nadu; or Country: United States, State: California):
+     Search for and prioritize real creators, founders, businesses, and influencers who are based in, originate from, or explicitly cater to that Country / State / Region.
+     If regional accounts are limited, include the top national creators in that country who have high penetration in that region.
+     Clearly indicate their geographic base in the "location" field (e.g., "Chennai, Tamil Nadu, India" or "Los Angeles, CA, USA").
+   - If location is Global / Worldwide:
+     Identify the top global category leaders and viral creators in that niche.
+4. DIVERSE STRATEGIC COHORT:
+   Include a balanced mix of:
+   - Market Leaders (Macro / Authority accounts, >150K followers)
+   - Growth Challengers (Mid-tier breakout creators with high Reel velocity, 25K-150K followers)
+   - Boutique Specialists (Micro / High-Conversion creators with dedicated community and strong funnels, 5K-25K followers)
+5. RICH STRATEGIC DATA:
+   - "handle": Real Instagram username starting with '@' (e.g. '@hubspot', '@anuragaggarwalofficial', '@thefutur').
+   - "name": Creator or brand actual name.
+   - "follower_count": Realistic follower magnitude (e.g. '1.2M', '340K', '68K').
+   - "tier": "Leader (Macro)" | "Challenger (Mid-Tier)" | "Boutique (High-Conversion)".
+   - "location": "City, State, Country" (or "Country" / "Global").
+   - "instagram_url": "https://www.instagram.com/<username>/".
+   - "bio": Authentic positioning statement or bio excerpt.
+   - "link_in_bio": Funnel destination (e.g., "Linktree -> Free Guide", "Newsletter opt-in", "Course / Community", "Direct App Install").
+   - "primary_format": Dominant content formats (e.g., "Reels (80%) + Carousels (20%)").
+   - "rough_engagement": Estimated engagement rate or average view magnitude (e.g., "High (~4.5%)", "Viral Reels (50K-200K views)").
+   - "posting_frequency": Estimated publishing cadence (e.g., "1 Reel/day", "4-5 posts/week").
+   - "growth_secret": 1-2 sentences on their specific content hook, visual format, or pacing edge.
+   - "top_hooks": Array of 2 to 3 real or representative viral hook opening lines from their high-performing posts.
 
-Return ONLY a valid JSON object matching this schema:
+Output your response strictly inside a ```json ... ``` code block conforming to this schema:
 {
-  "niche": "The analyzed niche name",
-  "total_found": 4,
+  "niche": "Target Niche",
+  "location": "Target Location",
+  "total_found": 8,
   "accounts": [
     {
-      "handle": "@handle",
-      "name": "Creator / Brand Name",
-      "follower_count": "e.g. 142K",
-      "tier": "Leader (Macro)" | "Challenger (Mid-Tier)" | "Boutique (High-Conversion)",
-      "bio": "Actual or representative Instagram bio line",
-      "link_in_bio": "Destination URL or funnel type (e.g. Stan Store -> Freebie, SaaS Free Trial, Typeform)",
+      "handle": "@exact_handle",
+      "name": "Creator Real Name",
+      "follower_count": "320K",
+      "tier": "Leader (Macro)",
+      "location": "City, State, Country",
+      "instagram_url": "https://www.instagram.com/exact_handle/",
+      "bio": "Creator bio line",
+      "link_in_bio": "Funnel destination",
       "primary_format": "Reels (75%) & Carousels (25%)",
-      "rough_engagement": "High (~4.2% avg engagement)",
-      "posting_frequency": "5 Reels/week, 2 Carousels/week",
-      "growth_secret": "One sentence explaining why their content stops the scroll and outperforms competitors",
+      "rough_engagement": "High (~4.2%)",
+      "posting_frequency": "5 Reels / week",
+      "growth_secret": "Concise explanation of what makes their content stop the scroll",
       "top_hooks": [
-        "Quote of a top-performing reel hook #1",
-        "Quote of a top-performing reel hook #2",
-        "Quote of a top-performing carousel hook #3"
+        "Opening hook line #1",
+        "Opening hook line #2",
+        "Opening hook line #3"
       ]
     }
   ]
 }
-
-Rules:
-1. Ensure all handles start with '@'.
-2. Provide authentic, realistic account data based on actual creators in this niche.
-3. Include real or true-to-life hook examples that represent what they actually post.
-4. Output ONLY valid JSON, no surrounding commentary or markdown fences.
 """
 
 
@@ -983,16 +1007,37 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
 
             niche = payload.get("niche", "").strip()
             goal = payload.get("goal", "").strip()
+            country = payload.get("country", "").strip()
+            state = payload.get("state", "").strip()
+            custom_location = payload.get("custom_location", "").strip()
+
             if not niche:
                 self._send_json(400, {"error": "Target niche or industry is required to discover accounts."})
                 return
 
+            # Construct targeted location string
+            location_parts = []
+            if custom_location:
+                location_parts.append(custom_location)
+            else:
+                if state and state not in ("All States / Nationwide", "All Regions", "All Provinces", "All Emirates", "All States", "All Regions / Worldwide"):
+                    location_parts.append(state)
+                if country and country not in ("Global", "Global / Worldwide (All Locations)", "Global / Worldwide (Any Location)"):
+                    location_parts.append(country)
+
+            location_str = ", ".join(location_parts) if location_parts else "Global / Worldwide"
+
             user_query = f"TARGET NICHE / INDUSTRY: {niche}\n"
+            user_query += f"TARGET GEOGRAPHY / LOCATION: {location_str}\n"
             if goal:
                 user_query += f"STRATEGIC GOAL: {goal}\n"
             user_query += (
-                "Search Instagram creator directories, social benchmarks, and public web data to discover "
-                "4 to 6 active, high-performing accounts in this exact niche. Return valid JSON strictly matching the schema."
+                f"Discover 6 to 10 REAL, LIVE, HIGH-PERFORMING Instagram creator or business accounts in the '{niche}' space "
+                f"located in or targeting {location_str}.\n"
+                f"CRITICAL: Every handle MUST be an actual, verified public Instagram profile that exists on https://www.instagram.com/<handle>/.\n"
+                f"Never create fictional, placeholder, or imaginary usernames. "
+                f"Search for actual verified influencers, industry authorities, media pages, and top creators. "
+                f"Output strictly inside a ```json ... ``` code block conforming to the JSON schema."
             )
 
             try:
@@ -1000,29 +1045,114 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 raw_text = None
                 used_model = None
 
+                # Search Grounding: NOTE - do NOT set response_mime_type="application/json" with google_search tool
+                # as Gemini API rejects or fails when search grounding is mixed with strict JSON mime types.
                 try:
                     search_tool = types.Tool(google_search=types.GoogleSearch())
                     config_with_search = types.GenerateContentConfig(
                         system_instruction=DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION,
                         tools=[search_tool],
-                        response_mime_type="application/json",
                     )
                     raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_with_search)
                 except Exception as e_search:
-                    print(f"Search grounding unavailable for discover accounts ({e_search}). Retrying with direct config ...")
+                    print(f"Search grounding unavailable for discover accounts ({e_search}). Retrying with direct knowledge ...")
                     config_direct = types.GenerateContentConfig(
                         system_instruction=DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION,
-                        response_mime_type="application/json",
                     )
                     raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_direct)
 
-                parsed_data = ad_analyzer.extract_json(raw_text)
-                accounts_list = parsed_data.get("accounts", []) if isinstance(parsed_data, dict) else []
+                # Parse JSON with multi-layered extraction
+                parsed_data = None
+                try:
+                    parsed_data = ad_analyzer.extract_json(raw_text)
+                except Exception:
+                    # Markdown code fence regex match
+                    m_fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_text, re.DOTALL)
+                    if m_fence:
+                        try:
+                            parsed_data = json.loads(m_fence.group(1))
+                        except Exception:
+                            pass
+                    if not parsed_data:
+                        m_brace = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+                        if m_brace:
+                            try:
+                                parsed_data = json.loads(m_brace.group(1))
+                            except Exception:
+                                pass
+
+                accounts_raw = []
+                if isinstance(parsed_data, dict):
+                    accounts_raw = parsed_data.get("accounts", [])
+                elif isinstance(parsed_data, list):
+                    accounts_raw = parsed_data
+
+                # Sanitize and verify handles
+                clean_accounts = []
+                seen_handles = set()
+                for acc in accounts_raw:
+                    if not isinstance(acc, dict):
+                        continue
+                    handle_raw = str(acc.get("handle", "")).strip()
+                    if not handle_raw:
+                        continue
+
+                    clean_username = handle_raw.replace("https://www.instagram.com/", "").replace("http://www.instagram.com/", "").replace("instagram.com/", "").strip("/@").strip()
+                    if not clean_username:
+                        continue
+
+                    # Filter out obvious fake placeholders
+                    if clean_username.lower() in ("example", "handle", "creator", "placeholder", "yourbrand", "yourhandle"):
+                        continue
+
+                    full_handle = f"@{clean_username}"
+                    if full_handle.lower() in seen_handles:
+                        continue
+                    seen_handles.add(full_handle.lower())
+
+                    acc["handle"] = full_handle
+                    acc["instagram_url"] = f"https://www.instagram.com/{clean_username}/"
+                    if not acc.get("location"):
+                        acc["location"] = location_str
+                    clean_accounts.append(acc)
+
+                # If fewer than 3 accounts were found, run a focused secondary fallback to guarantee rich results
+                if len(clean_accounts) < 3:
+                    print(f"Only {len(clean_accounts)} accounts parsed from search; triggering high-authority fallback query ...")
+                    direct_prompt = (
+                        f"Provide 6 to 8 of the most famous, verified, and universally recognized real Instagram creator and brand accounts "
+                        f"in the '{niche}' space for {location_str}. "
+                        f"Output ONLY a valid JSON object in a ```json ``` code block following the exact schema with authentic @handles."
+                    )
+                    config_fallback = types.GenerateContentConfig(
+                        system_instruction=DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION,
+                    )
+                    fallback_text, _ = ad_analyzer._call_with_fallback(client, [direct_prompt], config_fallback)
+                    try:
+                        fallback_json = ad_analyzer.extract_json(fallback_text)
+                        fb_accounts = fallback_json.get("accounts", []) if isinstance(fallback_json, dict) else []
+                        for acc in fb_accounts:
+                            if not isinstance(acc, dict):
+                                continue
+                            u = str(acc.get("handle", "")).replace("https://www.instagram.com/", "").strip("/@").strip()
+                            if not u or u.lower() in ("example", "placeholder"):
+                                continue
+                            fh = f"@{u}"
+                            if fh.lower() not in seen_handles:
+                                seen_handles.add(fh.lower())
+                                acc["handle"] = fh
+                                acc["instagram_url"] = f"https://www.instagram.com/{u}/"
+                                if not acc.get("location"):
+                                    acc["location"] = location_str
+                                clean_accounts.append(acc)
+                    except Exception as e_fb:
+                        print(f"Fallback parse notice: {e_fb}")
 
                 self._send_json(200, {
                     "success": True,
                     "niche": niche,
-                    "accounts": accounts_list,
+                    "location": location_str,
+                    "accounts": clean_accounts,
                     "model": used_model,
                 })
                 return

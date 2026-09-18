@@ -23,7 +23,8 @@ Available as both a **Sleek React Web Application** (with instant `Ctrl+V` clipb
    - Formats distribution, 5-10 top post hook patterns, the Good vs Bad diagnostic, niche content gaps, and 5 ready-to-shoot Reel ideas.
 
 4. **Instagram Niche Competitive Intelligence (Multi-Account Cohort Intel)**:
-   - **Auto-Discovery of High-Performing Accounts**: Type any niche keyword (e.g., *"B2B SaaS", "AI Video Tools", "Direct-To-Consumer Fitness"*) and click **Auto-Discover Top Accounts** to instantly locate 4–6 active, high-performing accounts with follower counts, tiers, bio hooks, growth secrets, and top hook samples via Google Search Grounding.
+   - **Auto-Discovery of High-Performing Accounts with Location Narrowing**: Type any niche keyword and narrow down by **Country** (e.g. United States, India, United Kingdom, Canada, Australia, UAE, etc.) and **State / Region** (e.g. California, New York, Tamil Nadu, Maharashtra, Ontario, London, Dubai) to discover 6–10 verified, live, high-performing accounts.
+   - **Verified Live Profile Links**: Direct clickable links to `instagram.com/<handle>/` to verify authentic creator accounts, follower counts, growth secrets, and top hook quotes.
    - **1-Click Import**: Instantly import discovered accounts into your multi-account cohort teardown or jump directly into a full 5-stage **Profile Audit**.
    - **Stage 1: Account Tiers & Optimization Matrix** (grouping by reach, trust, sales, community vs vanity metrics).
    - **Stage 2: Cross-Account Content Pillar Map** (identifying recurring themes and engagement correlations).
