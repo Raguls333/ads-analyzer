@@ -341,6 +341,47 @@ CRITICAL RULES:
 """
 
 
+DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION = """You are an elite Instagram competitive research specialist and social media analyst.
+Given a target niche or industry (and optional strategic goal), search public Instagram discussions, creator databases, Google, and industry benchmarks to discover 4 to 6 real, active, high-performing Instagram creator or brand accounts in this exact niche.
+
+Identify a diverse, strategic cohort featuring:
+- Top Market Leaders (Macro / Authority accounts)
+- Fast-Growing Challenger Accounts (Mid-tier accounts with high engagement velocity)
+- High-Conversion Boutique Accounts (Micro creators with rabid fans and clear monetization funnels)
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "niche": "The analyzed niche name",
+  "total_found": 4,
+  "accounts": [
+    {
+      "handle": "@handle",
+      "name": "Creator / Brand Name",
+      "follower_count": "e.g. 142K",
+      "tier": "Leader (Macro)" | "Challenger (Mid-Tier)" | "Boutique (High-Conversion)",
+      "bio": "Actual or representative Instagram bio line",
+      "link_in_bio": "Destination URL or funnel type (e.g. Stan Store -> Freebie, SaaS Free Trial, Typeform)",
+      "primary_format": "Reels (75%) & Carousels (25%)",
+      "rough_engagement": "High (~4.2% avg engagement)",
+      "posting_frequency": "5 Reels/week, 2 Carousels/week",
+      "growth_secret": "One sentence explaining why their content stops the scroll and outperforms competitors",
+      "top_hooks": [
+        "Quote of a top-performing reel hook #1",
+        "Quote of a top-performing reel hook #2",
+        "Quote of a top-performing carousel hook #3"
+      ]
+    }
+  ]
+}
+
+Rules:
+1. Ensure all handles start with '@'.
+2. Provide authentic, realistic account data based on actual creators in this niche.
+3. Include real or true-to-life hook examples that represent what they actually post.
+4. Output ONLY valid JSON, no surrounding commentary or markdown fences.
+"""
+
+
 class AdAnalyzerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Serve static files from ui/dist if it exists, otherwise current dir
@@ -921,6 +962,73 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 err_str = str(e)
                 self._send_json(500, {"error": f"Failed running Niche Competitive Intelligence: {err_str}", "details": err_str})
+                return
+
+        if parsed.path == "/api/insta-niche-intel/discover":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            niche = payload.get("niche", "").strip()
+            goal = payload.get("goal", "").strip()
+            if not niche:
+                self._send_json(400, {"error": "Target niche or industry is required to discover accounts."})
+                return
+
+            user_query = f"TARGET NICHE / INDUSTRY: {niche}\n"
+            if goal:
+                user_query += f"STRATEGIC GOAL: {goal}\n"
+            user_query += (
+                "Search Instagram creator directories, social benchmarks, and public web data to discover "
+                "4 to 6 active, high-performing accounts in this exact niche. Return valid JSON strictly matching the schema."
+            )
+
+            try:
+                client = genai.Client(api_key=api_key)
+                raw_text = None
+                used_model = None
+
+                try:
+                    search_tool = types.Tool(google_search=types.GoogleSearch())
+                    config_with_search = types.GenerateContentConfig(
+                        system_instruction=DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION,
+                        tools=[search_tool],
+                        response_mime_type="application/json",
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_with_search)
+                except Exception as e_search:
+                    print(f"Search grounding unavailable for discover accounts ({e_search}). Retrying with direct config ...")
+                    config_direct = types.GenerateContentConfig(
+                        system_instruction=DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION,
+                        response_mime_type="application/json",
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_direct)
+
+                parsed_data = ad_analyzer.extract_json(raw_text)
+                accounts_list = parsed_data.get("accounts", []) if isinstance(parsed_data, dict) else []
+
+                self._send_json(200, {
+                    "success": True,
+                    "niche": niche,
+                    "accounts": accounts_list,
+                    "model": used_model,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed discovering high-performing accounts: {err_str}", "details": err_str})
                 return
 
         if parsed.path != "/api/analyze":

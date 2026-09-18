@@ -2273,7 +2273,9 @@ function FormattedInstaAuditMarkdown({ content, filterStage, onCopy }) {
 }
 
 function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
-  const [profileInput, setProfileInput] = useState('');
+  const [profileInput, setProfileInput] = useState(() => {
+    return sessionStorage.getItem('ad_insta_prefill_handle') || '';
+  });
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditStageIndex, setAuditStageIndex] = useState(0);
   const [auditError, setAuditError] = useState('');
@@ -2281,6 +2283,14 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
   const [auditMeta, setAuditMeta] = useState(null);
   const [activeStageFilter, setActiveStageFilter] = useState('all');
   const [copyNotice, setCopyNotice] = useState('');
+
+  useEffect(() => {
+    const prefill = sessionStorage.getItem('ad_insta_prefill_handle');
+    if (prefill) {
+      setProfileInput(prefill);
+      sessionStorage.removeItem('ad_insta_prefill_handle');
+    }
+  }, []);
   const [auditHistory, setAuditHistory] = useState(() => {
     try {
       const raw = localStorage.getItem('ad_insta_audits');
@@ -3062,7 +3072,7 @@ function FormattedNicheIntelMarkdown({ content, filterStage, onCopy }) {
   return elements;
 }
 
-function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
+function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal, onSwitchToProfileAudit }) {
   const [niche, setNiche] = useState('B2B SaaS & AI Productivity');
   const [goal, setGoal] = useState('Launch a new creator-led SaaS page, find high-intent content gaps & drive free trials');
   const [accountsData, setAccountsData] = useState(SAMPLE_NICHE_SAAS.accountsData);
@@ -3073,6 +3083,13 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
   const [intelMeta, setIntelMeta] = useState(null);
   const [activeStageFilter, setActiveStageFilter] = useState('all');
   const [copyNotice, setCopyNotice] = useState('');
+
+  // Auto-Discovery State
+  const [discoveringAccounts, setDiscoveringAccounts] = useState(false);
+  const [discoveredAccounts, setDiscoveredAccounts] = useState([]);
+  const [discoveryError, setDiscoveryError] = useState('');
+  const [importedHandles, setImportedHandles] = useState([]);
+
   const [intelHistory, setIntelHistory] = useState(() => {
     try {
       const raw = localStorage.getItem('ad_insta_niche_audits');
@@ -3085,6 +3102,90 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
   const notifyCopy = (msg) => {
     setCopyNotice(msg);
     setTimeout(() => setCopyNotice(''), 3000);
+  };
+
+  const serializeAccountsToCohortData = (accounts) => {
+    return accounts.map((acc, idx) => {
+      const hooks = Array.isArray(acc.top_hooks) ? acc.top_hooks : [];
+      const hooksStr = hooks.map((h, hIdx) => `  ${hIdx + 1}. "${String(h).replace(/"/g, '')}"`).join('\n');
+      return `Account ${idx + 1}:
+- Handle: ${acc.handle || '@creator'}
+- Name: ${acc.name || 'Creator'}
+- Follower Count: ${acc.follower_count || 'Unknown'}
+- Tier: ${acc.tier || 'Competitor'}
+- Bio: ${acc.bio || 'N/A'}
+- Link-in-Bio: ${acc.link_in_bio || 'N/A'}
+- Primary Format: ${acc.primary_format || 'Reels & Carousels'}
+- Rough Engagement: ${acc.rough_engagement || 'High'}
+- Posting Frequency: ${acc.posting_frequency || 'Regular'}
+- Growth Secret: ${acc.growth_secret || 'Strong hooks & retention'}
+- Last 10-15 Post Captions / Hooks:
+${hooksStr || '  1. "Top performing hook in this niche"'}`;
+    }).join('\n\n');
+  };
+
+  const handleDiscoverAccounts = async () => {
+    const trimmedNiche = niche.trim();
+    if (!trimmedNiche) {
+      setDiscoveryError('Please enter a target niche or industry first to discover high-performing accounts.');
+      return;
+    }
+
+    setDiscoveryError('');
+    setDiscoveringAccounts(true);
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const payload = {
+      niche: trimmedNiche,
+      goal: goal.trim() || 'Find high-performing accounts and content gaps',
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/insta-niche-intel/discover`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to discover competitor accounts.');
+      }
+
+      const foundList = Array.isArray(data.accounts) ? data.accounts : [];
+      if (foundList.length === 0) {
+        throw new Error(`No accounts found for "${trimmedNiche}". Try using broader niche keywords.`);
+      }
+
+      setDiscoveredAccounts(foundList);
+      notifyCopy(`✨ Discovered ${foundList.length} high-performing accounts in ${trimmedNiche}!`);
+    } catch (err) {
+      setDiscoveryError(err.message || 'Error discovering accounts.');
+    } finally {
+      setDiscoveringAccounts(false);
+    }
+  };
+
+  const handleImportAllDiscovered = () => {
+    if (!discoveredAccounts || discoveredAccounts.length === 0) return;
+    const formatted = serializeAccountsToCohortData(discoveredAccounts);
+    setAccountsData(formatted);
+    setImportedHandles(discoveredAccounts.map((a) => a.handle));
+    notifyCopy(`✨ Imported all ${discoveredAccounts.length} accounts into teardown data!`);
+  };
+
+  const handleAddSingleAccount = (account) => {
+    const singleFormatted = serializeAccountsToCohortData([account]);
+    setAccountsData((prev) => {
+      const cleanPrev = prev.trim();
+      return cleanPrev ? `${cleanPrev}\n\n${singleFormatted}` : singleFormatted;
+    });
+    setImportedHandles((prev) => [...new Set([...prev, account.handle])]);
+    notifyCopy(`Added ${account.handle} to cohort data!`);
   };
 
   const handleRunIntel = async () => {
@@ -3278,14 +3379,41 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
             </label>
             <span className="label-hint">What market are you competing in?</span>
           </div>
-          <input
-            id="nicheInput"
-            type="text"
-            className="url-field niche-text-field"
-            placeholder="e.g. B2B SaaS / AI Productivity or Fitness for Founders"
-            value={niche}
-            onChange={(e) => setNiche(e.target.value)}
-          />
+
+          <div className="niche-search-input-group">
+            <input
+              id="nicheInput"
+              type="text"
+              className="url-field niche-text-field"
+              placeholder="e.g. B2B SaaS / AI Productivity or Fitness for Founders"
+              value={niche}
+              onChange={(e) => setNiche(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleDiscoverAccounts();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn-discover-accounts"
+              onClick={handleDiscoverAccounts}
+              disabled={discoveringAccounts || !niche.trim()}
+              title="Search Instagram creator databases for high-performing competitor accounts in this niche"
+            >
+              {discoveringAccounts ? (
+                <>
+                  <span className="spinner"></span>
+                  <span>Scouting Creators...</span>
+                </>
+              ) : (
+                <>
+                  <span>🔍 Auto-Discover Top Accounts</span>
+                </>
+              )}
+            </button>
+          </div>
 
           <div className="strategy-quick-chips">
             <span className="chips-label">Popular Niches:</span>
@@ -3306,6 +3434,138 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
               </button>
             ))}
           </div>
+
+          {/* Discovery Loading State */}
+          {discoveringAccounts && (
+            <div className="discovery-loading-banner">
+              <span className="spinner"></span>
+              <div className="discovery-loading-text">
+                <strong>Searching live Instagram creator benchmarks for "{niche}"...</strong>
+                <p>Scouting high-engagement leader accounts, breakout challengers, and high-converting funnels.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Discovery Error */}
+          {discoveryError && <div className="error-toast">{discoveryError}</div>}
+
+          {/* Discovered Accounts Container */}
+          {discoveredAccounts.length > 0 && !discoveringAccounts && (
+            <div className="discovered-accounts-container">
+              <div className="discovered-accounts-header">
+                <div className="discovered-header-left">
+                  <span className="discovered-sparkle-icon">✨</span>
+                  <div>
+                    <h4 className="discovered-title">
+                      High-Performing Accounts Discovered in <em>{niche}</em> ({discoveredAccounts.length})
+                    </h4>
+                    <p className="discovered-subtitle">
+                      Scouted via viral reels velocity, hook retention & funnel architecture. Add individual creators or import all into your cohort data below.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="discovered-header-actions">
+                  <button
+                    type="button"
+                    className="btn-import-all"
+                    onClick={handleImportAllDiscovered}
+                  >
+                    ✨ Import All ({discoveredAccounts.length}) to Cohort Data ⬇
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-clear-discovered"
+                    onClick={() => setDiscoveredAccounts([])}
+                    title="Dismiss discovered accounts"
+                  >
+                    ✕ Dismiss
+                  </button>
+                </div>
+              </div>
+
+              <div className="discovered-accounts-grid">
+                {discoveredAccounts.map((account, aIdx) => {
+                  const isImported = importedHandles.includes(account.handle);
+                  return (
+                    <div key={aIdx} className="discovered-account-card">
+                      <div className="card-top-row">
+                        <div className="creator-identity">
+                          <a
+                            href={`https://www.instagram.com/${(account.handle || '').replace(/^@/, '')}/`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="creator-handle-link"
+                          >
+                            {account.handle} ↗
+                          </a>
+                          {account.name && <span className="creator-name">{account.name}</span>}
+                        </div>
+                        {account.tier && (
+                          <span className={`tier-badge tier-${(account.tier || '').toLowerCase().replace(/[^a-z]/g, '')}`}>
+                            {account.tier}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="card-metrics-row">
+                        <span className="metric-pill">👥 {account.follower_count || 'N/A'}</span>
+                        <span className="metric-pill">📊 {account.primary_format || 'Reels'}</span>
+                        <span className="metric-pill">🔥 {account.rough_engagement || 'High'}</span>
+                      </div>
+
+                      {account.bio && (
+                        <p className="card-bio">
+                          <strong>Bio:</strong> {account.bio}
+                        </p>
+                      )}
+
+                      {account.link_in_bio && (
+                        <p className="card-funnel">
+                          <strong>Funnel:</strong> <code>{account.link_in_bio}</code>
+                        </p>
+                      )}
+
+                      {account.growth_secret && (
+                        <div className="card-growth-secret">
+                          <span className="secret-icon">💡</span>
+                          <span><strong>Winning Secret:</strong> {account.growth_secret}</span>
+                        </div>
+                      )}
+
+                      {account.top_hooks && account.top_hooks.length > 0 && (
+                        <div className="card-hooks-preview">
+                          <span className="hooks-label">Top Hooks:</span>
+                          <ul>
+                            {account.top_hooks.slice(0, 2).map((hk, hIdx) => (
+                              <li key={hIdx}>"{hk}"</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="card-actions-row">
+                        <button
+                          type="button"
+                          className={`btn-add-account ${isImported ? 'added' : ''}`}
+                          onClick={() => handleAddSingleAccount(account)}
+                        >
+                          {isImported ? '✓ Added to Cohort' : '➕ Add to Cohort'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-audit-account"
+                          onClick={() => onSwitchToProfileAudit && onSwitchToProfileAudit(account.handle)}
+                        >
+                          📸 Full Profile Audit ↗
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Goal Input */}
@@ -4223,6 +4483,12 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
             onOpenKeyModal={() => {
               setModalKeyInput(customApiKey);
               setShowKeyModal(true);
+            }}
+            onSwitchToProfileAudit={(handle) => {
+              sessionStorage.setItem('ad_insta_prefill_handle', handle);
+              setMainSection('insta-audit');
+              localStorage.setItem('ad_analyzer_section', 'insta-audit');
+              window.scrollTo({ top: 120, behavior: 'smooth' });
             }}
           />
         ) : (
