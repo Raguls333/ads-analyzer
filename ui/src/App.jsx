@@ -3251,6 +3251,34 @@ function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyMo
   const [discoveryError, setDiscoveryError] = useState('');
   const [importedHandles, setImportedHandles] = useState([]);
 
+  // Inline Handle Editing State
+  const [editingHandleIndex, setEditingHandleIndex] = useState(null);
+  const [editHandleValue, setEditHandleValue] = useState('');
+
+  const handleSaveEditedHandle = (index) => {
+    let clean = editHandleValue.trim();
+    if (!clean) return;
+    clean = clean.replace(/https?:\/\/(?:www\.)?instagram\.com\//i, '').replace(/[^a-zA-Z0-9._]/g, '');
+    if (!clean) return;
+    const fullHandle = `@${clean}`;
+    const username = clean;
+    setDiscoveredAccounts((prev) => {
+      const updated = [...prev];
+      const cur = updated[index];
+      const cName = cur?.name || username;
+      updated[index] = {
+        ...cur,
+        handle: fullHandle,
+        instagram_url: `https://www.instagram.com/${username}/`,
+        instagram_search_url: `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(cName)}`,
+        google_search_url: `https://www.google.com/search?q=${encodeURIComponent('site:instagram.com ' + cName + ' ' + fullHandle)}`,
+      };
+      return updated;
+    });
+    setEditingHandleIndex(null);
+    notifyCopy(`Updated handle to ${fullHandle}!`);
+  };
+
   const [intelHistory, setIntelHistory] = useState(() => {
     try {
       const raw = localStorage.getItem('ad_insta_niche_audits');
@@ -3744,25 +3772,86 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                 </div>
               </div>
 
+              {/* Anti-404 Live Profile Helper Banner */}
+              <div className="discovery-anti404-banner">
+                <span className="anti404-icon">🛡️</span>
+                <div className="anti404-content">
+                  <span>
+                    <strong>Live Profile Guarantee:</strong> Click <strong>📸 Direct IG ↗</strong> to open the creator. If Instagram shows <em>"Profile isn't available"</em> (due to recent username changes or regional filters), click <strong>🔎 Search on IG ↗</strong> to find their active page via Instagram's live search, or click <strong>✏️</strong> on the handle to fix/edit it directly!
+                  </span>
+                </div>
+              </div>
+
               <div className="discovered-accounts-grid">
                 {discoveredAccounts.map((account, aIdx) => {
                   const isImported = importedHandles.includes(account.handle);
-                  const igUrl = account.instagram_url || `https://www.instagram.com/${(account.handle || '').replace(/^@/, '')}/`;
+                  const rawHandle = (account.handle || '').replace(/^@/, '');
+                  const igUrl = account.instagram_url || `https://www.instagram.com/${rawHandle}/`;
+                  const searchIgUrl = account.instagram_search_url || `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(account.name || rawHandle)}`;
+                  const isEditingThisHandle = editingHandleIndex === aIdx;
+
                   return (
                     <div key={aIdx} className="discovered-account-card">
                       <div className="card-top-row">
-                        <div className="creator-identity">
-                          <a
-                            href={igUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="creator-handle-link"
-                            title="Open live verified profile on Instagram"
-                          >
-                            {account.handle} ↗
-                          </a>
-                          {account.name && <span className="creator-name">{account.name}</span>}
-                        </div>
+                        {isEditingThisHandle ? (
+                          <div className="handle-edit-inline">
+                            <input
+                              type="text"
+                              className="handle-edit-input"
+                              value={editHandleValue}
+                              onChange={(e) => setEditHandleValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveEditedHandle(aIdx);
+                                if (e.key === 'Escape') setEditingHandleIndex(null);
+                              }}
+                              placeholder="@handle"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              className="btn-handle-save"
+                              onClick={() => handleSaveEditedHandle(aIdx)}
+                              title="Save Handle"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-handle-cancel"
+                              onClick={() => setEditingHandleIndex(null)}
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="creator-identity">
+                            <div className="creator-handle-row">
+                              <a
+                                href={igUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="creator-handle-link"
+                                title="Open direct live profile on Instagram"
+                              >
+                                {account.handle} ↗
+                              </a>
+                              <button
+                                type="button"
+                                className="btn-inline-edit-handle"
+                                onClick={() => {
+                                  setEditingHandleIndex(aIdx);
+                                  setEditHandleValue(account.handle);
+                                }}
+                                title="Edit or correct handle"
+                              >
+                                ✏️
+                              </button>
+                            </div>
+                            {account.name && <span className="creator-name">{account.name}</span>}
+                          </div>
+                        )}
+
                         {account.tier && (
                           <span className={`tier-badge tier-${(account.tier || '').toLowerCase().replace(/[^a-z]/g, '')}`}>
                             {account.tier}
@@ -3812,17 +3901,27 @@ ${hooksStr || '  1. "Top performing hook in this niche"'}`;
                           type="button"
                           className={`btn-add-account ${isImported ? 'added' : ''}`}
                           onClick={() => handleAddSingleAccount(account)}
+                          title="Add this account to cohort teardown data"
                         >
-                          {isImported ? '✓ Added to Cohort' : '➕ Add to Cohort'}
+                          {isImported ? '✓ Added' : '➕ Add to Cohort'}
                         </button>
                         <a
                           href={igUrl}
                           target="_blank"
                           rel="noreferrer"
                           className="btn-view-ig"
-                          title="Open live Instagram profile in new tab"
+                          title="Open direct Instagram profile in new tab"
                         >
-                          📸 View on IG ↗
+                          📸 Direct IG ↗
+                        </a>
+                        <a
+                          href={searchIgUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-search-ig"
+                          title={`Search for "${account.name || rawHandle}" directly on Instagram`}
+                        >
+                          🔎 Search on IG ↗
                         </a>
                         <button
                           type="button"

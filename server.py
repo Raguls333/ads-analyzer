@@ -344,26 +344,30 @@ CRITICAL RULES:
 DISCOVER_ACCOUNTS_SYSTEM_INSTRUCTION = """You are an elite Instagram competitive intelligence researcher, creator scout, and social media strategist.
 Your mission is to find 6 to 10 REAL, LIVE, HIGH-PERFORMING public Instagram creator or business accounts in the specified niche and geographic location (Country, State/Region).
 
-CRITICAL VERIFICATION RULES FOR REAL INSTAGRAM PROFILES:
-1. EVERY SINGLE ACCOUNT MUST BE A REAL, EXISTING PUBLIC INSTAGRAM ACCOUNT that can be visited live at https://www.instagram.com/<handle>/.
-2. ABSOLUTELY NO FAKE, HYPOTHETICAL, OR PLACEHOLDER HANDLES.
-   Never invent usernames like '@example_saas', '@productivityos', or '@fitnesscoach_alex'.
-   Always identify actual, recognizable individuals, creators, industry authorities, media pages, or brands that actively publish on Instagram.
-3. GEOGRAPHIC PRECISION:
+CRITICAL VERIFICATION RULES FOR REAL INSTAGRAM PROFILES (PREVENTING BROKEN 404 LINKS):
+1. EVERY SINGLE ACCOUNT MUST BE A REAL, CURRENTLY ACTIVE PUBLIC INSTAGRAM ACCOUNT that exists at https://www.instagram.com/<handle>/.
+2. ABSOLUTELY ZERO GUESSING OR FABRICATION OF HANDLES:
+   - Do NOT concatenate a person's name with invented suffixes like '_official', '_hq', '_app', '_co', '_inc', or '_global' unless you have verified that this is their exact live Instagram handle.
+   - Do NOT include creators or brands that only operate on LinkedIn, Twitter/X, or YouTube. They MUST have an active Instagram account with public posts/Reels.
+   - If you are not 100% confident in an exact username, DO NOT GUESS — pick another prominent creator in this niche whose exact Instagram handle you are 100% certain of.
+3. HANDLE FORMAT INTEGRITY:
+   - Handles MUST be valid Instagram usernames: only letters, numbers, periods (.), and underscores (_). No spaces, no punctuation, no colons, no parentheses.
+   - Always format as '@exact_handle' (e.g., '@hubspot', '@anuragaggarwalofficial', '@alexhormozi', '@thefutur', '@garyvee').
+4. GEOGRAPHIC PRECISION:
    - If a Country and/or State/Region is specified (e.g., Country: India, State: Tamil Nadu; or Country: United States, State: California):
      Search for and prioritize real creators, founders, businesses, and influencers who are based in, originate from, or explicitly cater to that Country / State / Region.
      If regional accounts are limited, include the top national creators in that country who have high penetration in that region.
      Clearly indicate their geographic base in the "location" field (e.g., "Chennai, Tamil Nadu, India" or "Los Angeles, CA, USA").
    - If location is Global / Worldwide:
      Identify the top global category leaders and viral creators in that niche.
-4. DIVERSE STRATEGIC COHORT:
+5. DIVERSE STRATEGIC COHORT:
    Include a balanced mix of:
    - Market Leaders (Macro / Authority accounts, >150K followers)
    - Growth Challengers (Mid-tier breakout creators with high Reel velocity, 25K-150K followers)
    - Boutique Specialists (Micro / High-Conversion creators with dedicated community and strong funnels, 5K-25K followers)
-5. RICH STRATEGIC DATA:
-   - "handle": Real Instagram username starting with '@' (e.g. '@hubspot', '@anuragaggarwalofficial', '@thefutur').
-   - "name": Creator or brand actual name.
+6. RICH STRATEGIC DATA:
+   - "handle": Real Instagram username starting with '@'.
+   - "name": Creator or brand actual display name.
    - "follower_count": Realistic follower magnitude (e.g. '1.2M', '340K', '68K').
    - "tier": "Leader (Macro)" | "Challenger (Mid-Tier)" | "Boutique (High-Conversion)".
    - "location": "City, State, Country" (or "Country" / "Global").
@@ -1031,13 +1035,16 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             user_query += f"TARGET GEOGRAPHY / LOCATION: {location_str}\n"
             if goal:
                 user_query += f"STRATEGIC GOAL: {goal}\n"
+            user_query = f"TARGET NICHE / INDUSTRY: {niche}\n"
+            user_query += f"TARGET GEOGRAPHY / LOCATION: {location_str}\n"
+            if goal:
+                user_query += f"STRATEGIC GOAL: {goal}\n"
             user_query += (
-                f"Discover 6 to 10 REAL, LIVE, HIGH-PERFORMING Instagram creator or business accounts in the '{niche}' space "
-                f"located in or targeting {location_str}.\n"
-                f"CRITICAL: Every handle MUST be an actual, verified public Instagram profile that exists on https://www.instagram.com/<handle>/.\n"
-                f"Never create fictional, placeholder, or imaginary usernames. "
-                f"Search for actual verified influencers, industry authorities, media pages, and top creators. "
-                f"Output strictly inside a ```json ... ``` code block conforming to the JSON schema."
+                f"Execute targeted Google Search queries to discover 6 to 10 REAL, LIVE, ACTIVE Instagram accounts:\n"
+                f"1. Search 'site:instagram.com {niche} {location_str}' and 'top instagram creators in {niche} {location_str}'.\n"
+                f"2. Extract the exact public handle from the real 'instagram.com/<handle>' URLs in search results.\n"
+                f"3. CRITICAL ANTI-404 INSTRUCTION: Do NOT guess handles, and do NOT fabricate suffixes like '_official', '_app', '_hq', '_co' unless that is the exact live handle on Instagram. If an entity only exists on LinkedIn or Twitter, omit them and choose active Instagram creators.\n"
+                f"4. Format the output strictly inside a ```json ... ``` code block matching the schema."
             )
 
             try:
@@ -1087,7 +1094,7 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                 elif isinstance(parsed_data, list):
                     accounts_raw = parsed_data
 
-                # Sanitize and verify handles
+                # Sanitize and verify handles with strict Instagram username specification (alphanumeric, dot, underscore only)
                 clean_accounts = []
                 seen_handles = set()
                 for acc in accounts_raw:
@@ -1097,12 +1104,21 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                     if not handle_raw:
                         continue
 
-                    clean_username = handle_raw.replace("https://www.instagram.com/", "").replace("http://www.instagram.com/", "").replace("instagram.com/", "").strip("/@").strip()
-                    if not clean_username:
+                    # Strip URL prefixes, query parameters, trailing slashes, and path elements
+                    clean_raw = re.sub(r"https?://(?:www\.)?instagram\.com/", "", handle_raw).strip()
+                    clean_raw = clean_raw.split("?")[0].split("/")[0].split("&")[0].strip()
+
+                    # Extract the pure username token (alphanumeric, dot, underscore, 1-30 chars)
+                    m_user = re.search(r"@?([a-zA-Z0-9._]{1,30})", clean_raw)
+                    if not m_user:
+                        continue
+
+                    clean_username = m_user.group(1).strip("._")
+                    if not clean_username or len(clean_username) < 2:
                         continue
 
                     # Filter out obvious fake placeholders
-                    if clean_username.lower() in ("example", "handle", "creator", "placeholder", "yourbrand", "yourhandle"):
+                    if clean_username.lower() in ("example", "handle", "creator", "placeholder", "yourbrand", "yourhandle", "profile", "user", "instagram", "explore"):
                         continue
 
                     full_handle = f"@{clean_username}"
@@ -1110,8 +1126,11 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                         continue
                     seen_handles.add(full_handle.lower())
 
+                    creator_name = acc.get("name") or clean_username
                     acc["handle"] = full_handle
                     acc["instagram_url"] = f"https://www.instagram.com/{clean_username}/"
+                    acc["instagram_search_url"] = f"https://www.instagram.com/explore/search/keyword/?q={urllib.parse.quote_plus(creator_name)}"
+                    acc["google_search_url"] = f"https://www.google.com/search?q={urllib.parse.quote_plus('site:instagram.com ' + creator_name + ' ' + full_handle)}"
                     if not acc.get("location"):
                         acc["location"] = location_str
                     clean_accounts.append(acc)
@@ -1134,14 +1153,23 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
                         for acc in fb_accounts:
                             if not isinstance(acc, dict):
                                 continue
-                            u = str(acc.get("handle", "")).replace("https://www.instagram.com/", "").strip("/@").strip()
-                            if not u or u.lower() in ("example", "placeholder"):
+                            raw_u = str(acc.get("handle", "")).strip()
+                            clean_raw = re.sub(r"https?://(?:www\.)?instagram\.com/", "", raw_u).strip()
+                            clean_raw = clean_raw.split("?")[0].split("/")[0].split("&")[0].strip()
+                            m_fb = re.search(r"@?([a-zA-Z0-9._]{1,30})", clean_raw)
+                            if not m_fb:
+                                continue
+                            u = m_fb.group(1).strip("._")
+                            if not u or len(u) < 2 or u.lower() in ("example", "placeholder"):
                                 continue
                             fh = f"@{u}"
                             if fh.lower() not in seen_handles:
                                 seen_handles.add(fh.lower())
+                                c_name = acc.get("name") or u
                                 acc["handle"] = fh
                                 acc["instagram_url"] = f"https://www.instagram.com/{u}/"
+                                acc["instagram_search_url"] = f"https://www.instagram.com/explore/search/keyword/?q={urllib.parse.quote_plus(c_name)}"
+                                acc["google_search_url"] = f"https://www.google.com/search?q={urllib.parse.quote_plus('site:instagram.com ' + c_name + ' ' + fh)}"
                                 if not acc.get("location"):
                                     acc["location"] = location_str
                                 clean_accounts.append(acc)
