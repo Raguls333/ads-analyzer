@@ -446,18 +446,94 @@ def print_breakdown(data: dict, source: str, timestamp: str) -> None:
     print("=" * 65)
 
 
+def analyze_insta_niche_intel(client: genai.Client, niche: str, goal: str, accounts_data: str) -> tuple[str, str]:
+    """Execute Instagram Niche Competitive Intelligence on competitor accounts cohort."""
+    system_instruction = (
+        "You are an elite social media strategist, direct-response copywriter, and competitive intelligence director "
+        "specializing in Instagram growth and monetization.\n"
+        "Analyze competitor accounts in a niche, group account tiers by size and true optimization target (reach, trust, sales, community), "
+        "map cross-account content pillars and their correlation with engagement, tear down the 10 highest-performing hooks with named psychological copywriting patterns, "
+        "benchmark format performance (distinguishing niche-wide patterns from single-account outliers), read monetization funnels and value-to-pitch ratio, "
+        "diagnose oversaturated topics, uncover 5 specific untouched gap angles, and construct a 30-day content plan built strictly from the gaps.\n"
+        "Cite which account each observation came from (@handle), flag small sample sizes, contrast contradictory accounts, "
+        "and be blunt about vanity metrics vs actual commercial traction."
+    )
+
+    user_query = (
+        f"You're acting as a social media strategist doing competitive intelligence on Instagram for the [{niche}] niche.\n"
+        f"My goal is: {goal}\n\n"
+        f"Below is data I've collected on competitor accounts in this niche:\n"
+        f"--- BEGIN COMPETITOR DATA ---\n"
+        f"{accounts_data}\n"
+        f"--- END COMPETITOR DATA ---\n\n"
+        "Analyze this and give me the complete 7-stage competitive intelligence breakdown and Executive Summary strictly following all instructions."
+    )
+
+    try:
+        search_tool = types.Tool(google_search=types.GoogleSearch())
+        config_with_search = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=[search_tool],
+        )
+        return _call_with_fallback(client, [user_query], config_with_search)
+    except Exception as e_search:
+        print(f"Search grounding unavailable ({e_search}). Retrying with direct config ...")
+        config_direct = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+        )
+        return _call_with_fallback(client, [user_query], config_direct)
+
+
 # ---------------------------------------------------------------------------
 # Main Routine
 # ---------------------------------------------------------------------------
 def main():
     if len(sys.argv) < 2:
         print("Usage: python ad_analyzer.py <image_path_or_video_url_or_landing_page>")
+        print("       python ad_analyzer.py --niche-intel <data_file.txt> [--niche <niche>] [--goal <goal>]")
         print("\nExamples:")
         print("  python ad_analyzer.py screenshot.png")
         print("  python ad_analyzer.py https://www.instagram.com/reel/C2.../")
         print("  python ad_analyzer.py https://www.youtube.com/shorts/...")
         print("  python ad_analyzer.py https://example.com/landing-page")
+        print("  python ad_analyzer.py --niche-intel competitors.txt --niche \"B2B SaaS\" --goal \"Launch page\"")
         sys.exit(1)
+
+    if sys.argv[1] == "--niche-intel":
+        if len(sys.argv) < 3:
+            print("Error: Please provide a competitor data file. e.g. python ad_analyzer.py --niche-intel data.txt")
+            sys.exit(1)
+        data_path = sys.argv[2]
+        if not os.path.isfile(data_path):
+            print(f"Error: Data file '{data_path}' not found.", file=sys.stderr)
+            sys.exit(1)
+        with open(data_path, "r", encoding="utf-8") as f:
+            accounts_data = f.read()
+
+        niche = "General / Multi-account"
+        goal = "Find content gaps and build a 30-day plan"
+        if "--niche" in sys.argv:
+            n_idx = sys.argv.index("--niche")
+            if n_idx + 1 < len(sys.argv):
+                niche = sys.argv[n_idx + 1]
+        if "--goal" in sys.argv:
+            g_idx = sys.argv.index("--goal")
+            if g_idx + 1 < len(sys.argv):
+                goal = sys.argv[g_idx + 1]
+
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            print("[Error] GEMINI_API_KEY environment variable is not set.", file=sys.stderr)
+            sys.exit(1)
+
+        client = genai.Client(api_key=api_key)
+        print(f"Running Instagram Niche Competitive Intelligence for '{niche}' ...")
+        report, model = analyze_insta_niche_intel(client, niche, goal, accounts_data)
+        print("\n" + "=" * 70)
+        print(f" INSTAGRAM NICHE COMPETITIVE INTELLIGENCE REPORT ({model})")
+        print("=" * 70 + "\n")
+        print(report)
+        sys.exit(0)
 
     target_input = sys.argv[1].strip()
 

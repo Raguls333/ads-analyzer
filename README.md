@@ -6,22 +6,32 @@ Available as both a **Sleek React Web Application** (with instant `Ctrl+V` clipb
 
 ---
 
-## Features
+## Features & Modules
 
-- **React Web App**:
-  - **Instant Clipboard Paste (`Ctrl + V`)**: Copy any screenshot (`Win + Shift + S`) from Meta Ad Library, Twitter, TikTok, etc., press `Ctrl + V` in the app, and analyze immediately without saving image files to disk!
-  - **Drag & Drop**: Drop ad screenshots right onto the dropzone.
-  - **Landing Page URLs**: Input any web URL to extract copy, headlines, offers, and proof elements.
-  - **Interactive Strategy Breakdown**: Visual cards with color-coded tags for Observed facts and Strategic Inferences.
-  - **1-Click Copy**: Copy analysis as formatted Markdown for Notion/Docs or JSON.
-  - **Swipe File Archive**: Search and filter past analyses logged in `ad_log.csv` by keyword, angle, or buyer awareness stage.
-- **Python CLI Tool**:
-  - `python ad_analyzer.py screenshot.png` or `python ad_analyzer.py https://example.com`
-  - Formatted terminal output + auto-logging to `ad_log.csv`.
-- **Strict Strategy Schema**:
-  - **Observed**: Hook, Offer, CTA, Proof Elements, Price Shown, Creative Format (literal visual facts).
-  - **Inference**: Target Audience, Positioning, Psychological Angle, Awareness Level (reasoned hypotheses).
-  - **Notes**: Conversion mechanism without unsubstantiated performance claims.
+1. **Ad Creative Analyzer**:
+   - **Instant Clipboard Paste (`Ctrl + V`)**: Copy any screenshot (`Win + Shift + S`) from Meta Ad Library, TikTok, etc., press `Ctrl + V` in the app, and analyze immediately.
+   - **Video Ads & Reels**: Input Instagram Reels, YouTube Shorts, or upload MP4/MOV files to analyze pacing, visual scenes, and 0-3s hook.
+   - **Landing Page URLs**: Input any web URL to extract headlines, offers, and proof elements.
+   - **Swipe File Archive**: Search and filter past analyses logged in `ad_log.csv`.
+
+2. **Autonomous Ad Strategy Agent**:
+   - **4-Stage Pipeline**: Market Gap Discovery (Reddit/Forums) → Alex Hormozi Offer Engineering → Direct-Response Creative (Visual Prompts & Video Scripts) → Meta Ads Campaign Architecture.
+   - Multi-language script generation (English, Tamil, Tanglish, Hindi, Hinglish).
+
+3. **Instagram Profile Auditor**:
+   - 5-stage competitive profile teardown from a single Instagram handle/URL.
+   - Formats distribution, 5-10 top post hook patterns, the Good vs Bad diagnostic, niche content gaps, and 5 ready-to-shoot Reel ideas.
+
+4. **Instagram Niche Competitive Intelligence (Multi-Account Cohort Intel)**:
+   - Paste data collected across N competitor accounts (handles, followers, bios, links, post hooks, formats, engagement).
+   - **Stage 1: Account Tiers & Optimization Matrix** (grouping by reach, trust, sales, community vs vanity metrics).
+   - **Stage 2: Cross-Account Content Pillar Map** (identifying recurring themes and engagement correlations).
+   - **Stage 3: Top 10 Hook Teardowns & Formulas** (naming psychological copywriting patterns and swipe formulas).
+   - **Stage 4: Format vs Performance Benchmark** (distinguishing niche-wide trends from single-account outliers).
+   - **Stage 5: Monetization & Funnel Architecture** (bio paths, lead magnets, value vs pitch ratio).
+   - **Stage 6: Saturation vs Gap Analysis** (identifying audience fatigue and formulating 5 untouched high-intent angles).
+   - **Stage 7: 30-Day Content Plan Built from Gaps** (4-week calendar with hooks, formats, beats, and CTAs).
+   - Instant 1-click sample datasets (B2B SaaS & Fitness) and structured data template.
 
 ---
 

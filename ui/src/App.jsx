@@ -2681,6 +2681,968 @@ function InstaProfileAuditSection({ apiHealth, customApiKey, API_BASE, onOpenKey
   );
 }
 
+// ---------------------------------------------------------------------------
+// Instagram Niche Competitive Intelligence Component & Helpers
+// ---------------------------------------------------------------------------
+
+const NICHE_DATA_TEMPLATE = `Account 1:
+- Handle: @competitor_one
+- Follower Count: 85K
+- Bio: Helping founders scale organic reach | Free playbook below 👇
+- Link-in-Bio: beacons.ai/competitor_one -> Free Playbook / Community
+- Posting Frequency: 5 Reels/week, 2 Carousels/week
+- Post Formats: 70% Reels, 30% Carousels
+- Rough Engagement: ~2.5K avg likes, 180 comments (high save rate)
+- Last 10-15 Post Captions / Hooks:
+  1. "Stop creating content every day (do this weekly batching system instead)" [Reel, 4.2k likes, 310 comments]
+  2. "The 4-step framework we used to book 38 calls without paid ads" [Carousel, 2.1k likes, 190 comments]
+  3. "Unpopular opinion: Long-form captions are killing your reach" [Reel, 6.8k likes, 520 comments]
+  4. "3 tools I use to write a week of content in 45 minutes" [Reel, 3.4k likes, 240 comments]
+  5. "Why your Instagram views dropped this week (and the fix)" [Carousel, 1.9k likes, 140 comments]
+
+Account 2:
+- Handle: @competitor_two
+- Follower Count: 210K
+- Bio: Micro-SaaS founder sharing daily growth experiments 🚀
+- Link-in-Bio: saastool.io/free-trial
+- Posting Frequency: Daily Reels (talking head + screen share)
+- Post Formats: 90% Reels, 10% Carousels
+- Rough Engagement: ~8K avg likes, 450 comments
+- Last 10-15 Post Captions / Hooks:
+  1. "3 AI automations that save me 15 hours every single week" [Reel, 12k likes, 890 comments]
+  2. "How I built a $40k/mo tool with zero employees" [Reel, 9.4k likes, 610 comments]
+  3. "If you still do data entry manually, watch this" [Reel, 7.8k likes, 420 comments]
+
+Account 3:
+- Handle: @competitor_three
+- Follower Count: 32K
+- Bio: Boutique B2B consulting | We scale systems for 7-figure creators
+- Link-in-Bio: cal.com/consulting-call
+- Posting Frequency: 3 Carousels/week
+- Post Formats: 80% Carousels, 20% Static
+- Rough Engagement: ~900 likes, 120 comments (very high conversion DMs)
+- Last 10-15 Post Captions / Hooks:
+  1. "Swipe through our exact client onboarding SOP" [Carousel, 1.2k likes, 160 comments]
+  2. "Why most $50k/mo agencies break before reaching $100k" [Carousel, 1.4k likes, 180 comments]
+  3. "The one metrics dashboard every founder should check on Monday" [Carousel, 850 likes, 95 comments]`;
+
+const SAMPLE_NICHE_SAAS = {
+  niche: 'B2B SaaS & AI Productivity',
+  goal: 'Launch a new creator-led SaaS page, find high-intent content gaps & drive free trials',
+  accountsData: `Account 1:
+- Handle: @flowdesk_app
+- Follower Count: 142K
+- Bio: Automate your daily repetitive work | 14-day free trial 👇
+- Link-in-Bio: flowdesk.io/trial -> SaaS trial signup
+- Posting Frequency: 5 Reels/week, 2 Carousels/week
+- Post Formats: 75% Reels, 25% Carousels
+- Rough Engagement: ~4.5K avg likes, 320 comments per post
+- Last 10-15 Post Captions / Hooks:
+  1. "Stop doing client follow-ups manually (here is the 1-click workflow)" [Reel, 8.2k likes, 540 comments]
+  2. "I automated 80% of my inbox in 10 minutes (steal this zap)" [Reel, 6.1k likes, 410 comments]
+  3. "Why Google Docs is secretly killing your team's weekly output" [Carousel, 3.4k likes, 290 comments]
+  4. "3 chrome extensions that feel illegal for project managers" [Reel, 9.5k likes, 720 comments]
+  5. "How to build a custom CRM without writing a single line of code" [Carousel, 2.8k likes, 180 comments]
+  6. "The exact stack we used to handle 500 support tickets with 1 person" [Reel, 4.3k likes, 260 comments]
+
+Account 2:
+- Handle: @saascodex
+- Follower Count: 39K
+- Bio: We build & teardown 7-figure micro-SaaS | Free weekly breakdown newsletter 📬
+- Link-in-Bio: saascodex.substack.com -> Free Newsletter & Notion swipe files
+- Posting Frequency: 4 Carousels/week, 1 Reel/week
+- Post Formats: 80% Carousels, 20% Reels
+- Rough Engagement: ~1.8K avg likes, 410 comments (extremely high comment quality & saves)
+- Last 10-15 Post Captions / Hooks:
+  1. "5 Notion templates generating $10k/mo on pure autopilot" [Carousel, 2.9k likes, 580 comments]
+  2. "The technical architecture of a $1M ARR solo founder" [Carousel, 3.2k likes, 620 comments]
+  3. "How we cut customer churn from 8% to 1.2% with one automated email" [Carousel, 2.1k likes, 490 comments]
+  4. "Why 90% of AI wrapper startups will die before Q4" [Reel, 1.4k likes, 310 comments]
+  5. "The exact pricing page tear-down that doubled our checkout conversion" [Carousel, 2.4k likes, 510 comments]
+
+Account 3:
+- Handle: @productivityos
+- Follower Count: 235K
+- Bio: Daily AI tools to work 4 hours a day 🚀 | Download free prompt pack
+- Link-in-Bio: stan.store/prodos -> $27 prompt pack & affiliate links
+- Posting Frequency: Daily Reels (7 Reels/week, heavy B-roll + text overlays)
+- Post Formats: 95% Reels, 5% Static
+- Rough Engagement: ~9.8K avg likes, 680 comments (viral reach, shallow comment depth)
+- Last 10-15 Post Captions / Hooks:
+  1. "3 AI websites that feel illegal to know in 2026" [Reel, 24k likes, 1.4k comments]
+  2. "Stop using ChatGPT like an amateur (use this prompt instead)" [Reel, 18k likes, 1.1k comments]
+  3. "If you are not using this AI tool, you are wasting 3 hours every day" [Reel, 14k likes, 820 comments]
+  4. "This free tool replaces 5 paid apps instantly" [Reel, 11k likes, 740 comments]
+  5. "Secret AI hack for Excel that nobody talks about" [Reel, 15k likes, 930 comments]`,
+};
+
+const SAMPLE_NICHE_FITNESS = {
+  niche: 'Online Fitness Coaching for Busy Founders & Executives',
+  goal: 'Position a $3,000 high-ticket coaching offer and find untouched content angles nobody covers',
+  accountsData: `Account 1:
+- Handle: @founderfit_alex
+- Follower Count: 68K
+- Bio: Dropped 40lbs while scaling to $2M ARR | Helping tech founders get lean without giving up alcohol or family dinners
+- Link-in-Bio: typeform.com/founderfit-apply -> $3,500 12-week high-ticket application
+- Posting Frequency: 4 Reels/week, 2 Carousels/week
+- Post Formats: 70% Reels, 30% Carousels
+- Rough Engagement: ~2.8K avg likes, 260 comments
+- Last 10-15 Post Captions / Hooks:
+  1. "Why doing 45 minutes of cardio is keeping busy founders fat" [Reel, 5.2k likes, 410 comments]
+  2. "The exact 3-meal blueprint I use while working 65 hours a week" [Carousel, 3.8k likes, 380 comments]
+  3. "How my client lost 28lbs without stepping foot in a commercial gym" [Carousel, 2.4k likes, 290 comments]
+  4. "Stop cutting carbs on Monday only to binge on Friday night" [Reel, 4.1k likes, 320 comments]
+  5. "The travel nutrition protocol for founders living out of airports" [Carousel, 2.9k likes, 270 comments]
+
+Account 2:
+- Handle: @dr_metabolic
+- Follower Count: 190K
+- Bio: MD & Functional Health Specialist | Reversing executive burnout & insulin resistance
+- Link-in-Bio: masterclass.drmetabolic.com -> Webinar -> $1,200 lab review package
+- Posting Frequency: 5 Reels/week (talking head in white coat / clinical setting)
+- Post Formats: 85% Reels, 15% Carousels
+- Rough Engagement: ~7.5K avg likes, 610 comments
+- Last 10-15 Post Captions / Hooks:
+  1. "If you wake up tired at 3 AM every night, your liver is telling you this" [Reel, 16k likes, 1.2k comments]
+  2. "The #1 blood test your doctor never runs for brain fog" [Reel, 12k likes, 880 comments]
+  3. "3 supplements that actually lower afternoon cortisol spikes" [Reel, 9.4k likes, 620 comments]
+  4. "Why high protein might actually be causing your bloating" [Reel, 6.7k likes, 490 comments]
+  5. "The circadian light routine that fixed my executive insomnia" [Carousel, 4.2k likes, 350 comments]
+
+Account 3:
+- Handle: @deskbound_physique
+- Follower Count: 26K
+- Bio: Sitting 10 hours a day? Fix your posture, kill lower back pain & build visible abs with 3x40min workouts
+- Link-in-Bio: DM 'POSTURE' for free mobility routine
+- Posting Frequency: 3 Reels/week, 3 Carousels/week
+- Post Formats: 50% Reels, 50% Carousels
+- Rough Engagement: ~1.1K avg likes, 190 comments (extremely high DM conversion)
+- Last 10-15 Post Captions / Hooks:
+  1. "Do this 2-minute stretch before opening your laptop" [Reel, 3.6k likes, 340 comments]
+  2. "The dead hang protocol: How 3 minutes a day cured my spine compression" [Carousel, 2.2k likes, 280 comments]
+  3. "Why standard ergonomic chairs make your anterior pelvic tilt worse" [Carousel, 1.8k likes, 210 comments]
+  4. "3 exercises to undo 8 hours of slouching" [Reel, 2.9k likes, 310 comments]
+  5. "The hip flexor release that immediately relieves lower back tension" [Reel, 2.1k likes, 220 comments]`,
+};
+
+function extractNicheIntelSnippet(text, type) {
+  if (!text) return '';
+  if (type === 'summary') {
+    const match = text.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    return match ? match[0].trim() : '';
+  }
+  if (type === 'hooks') {
+    const match = text.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    return match ? match[0].trim() : '';
+  }
+  if (type === 'gaps') {
+    const match = text.match(/(?:STAGE\s*6[\s\S]*?)(?:STAGE\s*7|$)/i);
+    return match ? match[0].trim() : '';
+  }
+  if (type === 'plan') {
+    const match = text.match(/(?:STAGE\s*7[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    return match ? match[0].trim() : '';
+  }
+  if (type === 'tiers') {
+    const match = text.match(/(?:STAGE\s*1[\s\S]*?)(?:STAGE\s*2|$)/i);
+    return match ? match[0].trim() : '';
+  }
+  return '';
+}
+
+function FormattedNicheIntelMarkdown({ content, filterStage, onCopy }) {
+  if (!content) return null;
+
+  let targetContent = content;
+  if (filterStage === 'summary') {
+    const match = content.match(/(?:#+\s*)?(?:EXECUTIVE SUMMARY|Executive Summary)[\s\S]*$/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage1') {
+    const match = content.match(/(?:STAGE\s*1[\s\S]*?)(?:STAGE\s*2|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage2') {
+    const match = content.match(/(?:STAGE\s*2[\s\S]*?)(?:STAGE\s*3|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage3') {
+    const match = content.match(/(?:STAGE\s*3[\s\S]*?)(?:STAGE\s*4|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage4') {
+    const match = content.match(/(?:STAGE\s*4[\s\S]*?)(?:STAGE\s*5|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage5') {
+    const match = content.match(/(?:STAGE\s*5[\s\S]*?)(?:STAGE\s*6|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage6') {
+    const match = content.match(/(?:STAGE\s*6[\s\S]*?)(?:STAGE\s*7|$)/i);
+    if (match) targetContent = match[0];
+  } else if (filterStage === 'stage7') {
+    const match = content.match(/(?:STAGE\s*7[\s\S]*?)(?:EXECUTIVE SUMMARY|Executive Summary|$)/i);
+    if (match) targetContent = match[0];
+  }
+
+  const lines = targetContent.split('\n');
+  const elements = [];
+  let inCodeBlock = false;
+  let codeBlockLines = [];
+  let codeBlockLang = '';
+  let inTable = false;
+  let tableRows = [];
+
+  const flushCode = (key) => {
+    if (codeBlockLines.length > 0) {
+      const codeText = codeBlockLines.join('\n');
+      elements.push(
+        <div key={key} className="strategy-code-box niche-code-box">
+          <div className="strategy-code-header">
+            <span className="code-lang-label">{codeBlockLang || 'Formula / Template'}</span>
+            <button
+              type="button"
+              className="btn-copy-sm"
+              onClick={() => {
+                navigator.clipboard.writeText(codeText);
+                onCopy('Copied template block to clipboard!');
+              }}
+            >
+              📋 Copy
+            </button>
+          </div>
+          <pre className="strategy-code-pre">{codeText}</pre>
+        </div>
+      );
+      codeBlockLines = [];
+      codeBlockLang = '';
+    }
+  };
+
+  const flushTable = (key) => {
+    if (tableRows.length > 0) {
+      const headerRow = tableRows[0];
+      const dataRows = tableRows.slice(1).filter((r) => !r.every((c) => /^:?-+:?$/.test(c.trim())));
+      elements.push(
+        <div key={key} className="strategy-table-scroll">
+          <table className="strategy-table niche-strategy-table">
+            <thead>
+              <tr>
+                {headerRow.map((cell, cIdx) => (
+                  <th key={cIdx}>{renderInlineMarkdown(cell.trim())}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((row, rIdx) => (
+                <tr key={rIdx}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx}>{renderInlineMarkdown(cell.trim())}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableRows = [];
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        flushCode(`code-${i}`);
+        inCodeBlock = false;
+      } else {
+        if (inTable) {
+          flushTable(`tbl-${i}`);
+          inTable = false;
+        }
+        inCodeBlock = true;
+        codeBlockLang = trimmed.replace('```', '').trim();
+        codeBlockLines = [];
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const cells = trimmed.split('|').slice(1, -1);
+      const isSep = cells.every((c) => /^:?-+:?$/.test(c.trim()));
+      if (!isSep) {
+        inTable = true;
+        tableRows.push(cells);
+      }
+      continue;
+    } else if (inTable) {
+      flushTable(`tbl-${i}`);
+      inTable = false;
+    }
+
+    if (!trimmed) continue;
+    if (/^={4,}/.test(trimmed)) continue;
+
+    if (trimmed.startsWith('# ')) {
+      elements.push(<h2 key={`h1-${i}`} className="strategy-h1">{trimmed.replace(/^#\s+/, '')}</h2>);
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      elements.push(<h3 key={`h2-${i}`} className="strategy-h2">{trimmed.replace(/^##\s+/, '')}</h3>);
+      continue;
+    }
+    if (trimmed.startsWith('### ')) {
+      elements.push(<h4 key={`h3-${i}`} className="strategy-h3">{trimmed.replace(/^###\s+/, '')}</h4>);
+      continue;
+    }
+
+    if (/^STAGE\s*[1-7]/i.test(trimmed)) {
+      elements.push(
+        <div key={`stage-${i}`} className="strategy-stage-banner niche-stage-banner">
+          <span className="stage-banner-badge niche-badge">STAGE</span>
+          <span className="stage-banner-text">{trimmed}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^(?:EXECUTIVE SUMMARY|Executive Summary)/i.test(trimmed)) {
+      elements.push(
+        <div key={`exec-${i}`} className="strategy-stage-banner exec-summary-banner niche-exec-banner">
+          <span className="stage-banner-badge exec-badge">⚡ SUMMARY</span>
+          <span className="stage-banner-text">{trimmed}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const bulletContent = trimmed.replace(/^[-*]\s+/, '');
+      elements.push(
+        <div key={`li-${i}`} className="strategy-li">
+          <span className="strategy-bullet">•</span>
+          <span className="strategy-li-text">{renderInlineMarkdown(bulletContent)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const match = trimmed.match(/^(\d+)\.\s+(.*)/);
+      elements.push(
+        <div key={`oli-${i}`} className="strategy-li">
+          <span className="strategy-number-badge niche-number-badge">{match ? match[1] : '•'}</span>
+          <span className="strategy-li-text">{renderInlineMarkdown(match ? match[2] : trimmed)}</span>
+        </div>
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith('>')) {
+      elements.push(
+        <blockquote key={`bq-${i}`} className="strategy-quote niche-quote">
+          {renderInlineMarkdown(trimmed.replace(/^>\s*/, ''))}
+        </blockquote>
+      );
+      continue;
+    }
+
+    elements.push(
+      <p key={`p-${i}`} className="strategy-p">
+        {renderInlineMarkdown(trimmed)}
+      </p>
+    );
+  }
+
+  if (inCodeBlock) flushCode('code-final');
+  if (inTable) flushTable('tbl-final');
+
+  return elements;
+}
+
+function InstaNicheIntelSection({ apiHealth, customApiKey, API_BASE, onOpenKeyModal }) {
+  const [niche, setNiche] = useState('B2B SaaS & AI Productivity');
+  const [goal, setGoal] = useState('Launch a new creator-led SaaS page, find high-intent content gaps & drive free trials');
+  const [accountsData, setAccountsData] = useState(SAMPLE_NICHE_SAAS.accountsData);
+  const [intelLoading, setIntelLoading] = useState(false);
+  const [intelStageIndex, setIntelStageIndex] = useState(0);
+  const [intelError, setIntelError] = useState('');
+  const [intelResult, setIntelResult] = useState('');
+  const [intelMeta, setIntelMeta] = useState(null);
+  const [activeStageFilter, setActiveStageFilter] = useState('all');
+  const [copyNotice, setCopyNotice] = useState('');
+  const [intelHistory, setIntelHistory] = useState(() => {
+    try {
+      const raw = localStorage.getItem('ad_insta_niche_audits');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const notifyCopy = (msg) => {
+    setCopyNotice(msg);
+    setTimeout(() => setCopyNotice(''), 3000);
+  };
+
+  const handleRunIntel = async () => {
+    const trimmedNiche = niche.trim();
+    const trimmedGoal = goal.trim();
+    const trimmedData = accountsData.trim();
+
+    if (!trimmedNiche) {
+      setIntelError('Please enter the target niche or industry.');
+      return;
+    }
+    if (!trimmedData) {
+      setIntelError('Please paste competitive data for at least 1 or 2 competitor accounts, or load a sample cohort.');
+      return;
+    }
+
+    setIntelError('');
+    setIntelLoading(true);
+    setIntelStageIndex(1);
+
+    const timer = setInterval(() => {
+      setIntelStageIndex((prev) => (prev < 7 ? prev + 1 : prev));
+    }, 4000);
+
+    const effectiveKey = typeof customApiKey === 'string' ? customApiKey.trim() : '';
+    const payload = {
+      niche: trimmedNiche,
+      goal: trimmedGoal || 'Find content gaps and build a 30-day content plan',
+      accountsData: trimmedData,
+    };
+    if (effectiveKey) payload.apiKey = effectiveKey;
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (effectiveKey) headers['X-Gemini-API-Key'] = effectiveKey;
+
+      const res = await fetch(`${API_BASE}/api/insta-niche-intel`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to analyze niche competitive intelligence');
+      }
+
+      const resultText = data.result;
+      const meta = {
+        niche: data.niche || trimmedNiche,
+        goal: data.goal || trimmedGoal,
+        timestamp: new Date().toLocaleString(),
+        model: data.model || apiHealth.model || 'gemini-2.5-flash',
+      };
+
+      setIntelResult(resultText);
+      setIntelMeta(meta);
+      setActiveStageFilter('all');
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+
+      const historyItem = {
+        id: Date.now().toString(),
+        ...meta,
+        result: resultText,
+        accountsData: trimmedData,
+      };
+
+      setIntelHistory((prev) => {
+        const updated = [historyItem, ...prev.filter((p) => p.niche !== meta.niche)].slice(0, 20);
+        try {
+          localStorage.setItem('ad_insta_niche_audits', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed saving niche intel history:', e);
+        }
+        return updated;
+      });
+    } catch (err) {
+      setIntelError(err.message || 'An error occurred during competitive intelligence analysis.');
+    } finally {
+      clearInterval(timer);
+      setIntelLoading(false);
+      setIntelStageIndex(0);
+    }
+  };
+
+  const handleCopyFull = () => {
+    if (!intelResult) return;
+    navigator.clipboard.writeText(intelResult);
+    notifyCopy('Full Competitive Intelligence Report copied!');
+  };
+
+  const handleCopyHooks = () => {
+    const snippet = extractNicheIntelSnippet(intelResult, 'hooks');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('🪝 Top 10 Hook Teardowns copied!');
+    } else {
+      navigator.clipboard.writeText(intelResult);
+      notifyCopy('Report copied to clipboard.');
+    }
+  };
+
+  const handleCopyGaps = () => {
+    const snippet = extractNicheIntelSnippet(intelResult, 'gaps');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('🎯 5 Untouched Gap Angles copied!');
+    } else {
+      navigator.clipboard.writeText(intelResult);
+      notifyCopy('Report copied to clipboard.');
+    }
+  };
+
+  const handleCopyPlan = () => {
+    const snippet = extractNicheIntelSnippet(intelResult, 'plan');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('📅 30-Day Content Plan copied!');
+    } else {
+      navigator.clipboard.writeText(intelResult);
+      notifyCopy('Report copied to clipboard.');
+    }
+  };
+
+  const handleCopySummary = () => {
+    const snippet = extractNicheIntelSnippet(intelResult, 'summary');
+    if (snippet) {
+      navigator.clipboard.writeText(snippet);
+      notifyCopy('⚡ Executive Summary copied!');
+    } else {
+      navigator.clipboard.writeText(intelResult);
+      notifyCopy('Report copied to clipboard.');
+    }
+  };
+
+  const handleLoadHistory = (item) => {
+    setIntelResult(item.result);
+    setNiche(item.niche || '');
+    setGoal(item.goal || '');
+    if (item.accountsData) setAccountsData(item.accountsData);
+    setIntelMeta({
+      niche: item.niche,
+      goal: item.goal,
+      timestamp: item.timestamp,
+      model: item.model,
+    });
+    setActiveStageFilter('all');
+    window.scrollTo({ top: 120, behavior: 'smooth' });
+  };
+
+  const handleDeleteHistory = (id, e) => {
+    e.stopPropagation();
+    setIntelHistory((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('ad_insta_niche_audits', JSON.stringify(updated));
+      } catch (err) {
+        console.warn('Failed to delete history:', err);
+      }
+      return updated;
+    });
+  };
+
+  const hasHooks = Boolean(extractNicheIntelSnippet(intelResult, 'hooks'));
+  const hasGaps = Boolean(extractNicheIntelSnippet(intelResult, 'gaps'));
+  const hasPlan = Boolean(extractNicheIntelSnippet(intelResult, 'plan'));
+
+  return (
+    <div className="niche-intel-section">
+      {copyNotice && <div className="strategy-toast-notice">{copyNotice}</div>}
+
+      {/* Hero Header */}
+      <div className="strategy-hero-card niche-hero-card">
+        <div className="strategy-hero-badge niche-hero-badge">
+          <span className="badge-pulse"></span>
+          <span>Competitive Intelligence • Multi-Account Cohort Analysis</span>
+        </div>
+        <h2 className="strategy-hero-title">Instagram Niche Competitive Intelligence</h2>
+        <p className="strategy-hero-subtitle">
+          Benchmark a cohort of competitor accounts in your niche. Group accounts into strategic tiers, map high-engagement content pillars, deconstruct the <strong>Top 10 highest-performing hooks</strong>, identify format winners, dissect monetization funnels, expose market saturation vs. <strong>5 untouched gap angles</strong>, and generate a <strong>30-day content plan built from gaps</strong>.
+        </p>
+      </div>
+
+      {/* Input Form Card */}
+      <section className="card strategy-form-card niche-form-card">
+        {/* Niche Input */}
+        <div className="form-group">
+          <div className="label-with-hint">
+            <label className="input-label" htmlFor="nicheInput">
+              <strong>Target Niche / Industry *</strong>
+            </label>
+            <span className="label-hint">What market are you competing in?</span>
+          </div>
+          <input
+            id="nicheInput"
+            type="text"
+            className="url-field niche-text-field"
+            placeholder="e.g. B2B SaaS / AI Productivity or Fitness for Founders"
+            value={niche}
+            onChange={(e) => setNiche(e.target.value)}
+          />
+
+          <div className="strategy-quick-chips">
+            <span className="chips-label">Popular Niches:</span>
+            {[
+              'B2B SaaS / AI Productivity',
+              'Fitness Coaching for Busy Founders',
+              'Personal Finance & Investing',
+              'D2C E-commerce & Fashion',
+              'B2B Agency & Client Acquisition',
+            ].map((n, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="quick-chip-btn"
+                onClick={() => setNiche(n)}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Goal Input */}
+        <div className="form-group">
+          <div className="label-with-hint">
+            <label className="input-label" htmlFor="goalInput">
+              <strong>Strategic Goal *</strong>
+            </label>
+            <span className="label-hint">What do you want to achieve?</span>
+          </div>
+          <input
+            id="goalInput"
+            type="text"
+            className="url-field niche-text-field"
+            placeholder="e.g. Launch a new page, position a SaaS, find monetization gaps"
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+          />
+
+          <div className="strategy-quick-chips">
+            <span className="chips-label">Goal Presets:</span>
+            {[
+              'Launch a new creator-led page',
+              'Position a SaaS product & drive trials',
+              'Find content gaps & untapped hook angles',
+              'Build a $3k-$5k high-ticket client funnel',
+              'Scale organic reach with viral Reels & Carousels',
+            ].map((g, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className="quick-chip-btn"
+                onClick={() => setGoal(g)}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Competitor Accounts Data */}
+        <div className="form-group">
+          <div className="label-with-hint">
+            <label className="input-label" htmlFor="accountsDataInput">
+              <strong>Competitor Accounts Data (N Accounts) *</strong>
+            </label>
+            <span className="label-hint">Handle, followers, bio, link, post hooks, formats, engagement</span>
+          </div>
+
+          <div className="niche-data-toolbar">
+            <div className="niche-data-toolbar-left">
+              <button
+                type="button"
+                className="btn-toolbar-action"
+                onClick={() => {
+                  setNiche(SAMPLE_NICHE_SAAS.niche);
+                  setGoal(SAMPLE_NICHE_SAAS.goal);
+                  setAccountsData(SAMPLE_NICHE_SAAS.accountsData);
+                  notifyCopy('Loaded B2B SaaS cohort dataset!');
+                }}
+              >
+                ⚡ Load SaaS Sample (3 Accounts)
+              </button>
+              <button
+                type="button"
+                className="btn-toolbar-action"
+                onClick={() => {
+                  setNiche(SAMPLE_NICHE_FITNESS.niche);
+                  setGoal(SAMPLE_NICHE_FITNESS.goal);
+                  setAccountsData(SAMPLE_NICHE_FITNESS.accountsData);
+                  notifyCopy('Loaded Fitness Coaching cohort dataset!');
+                }}
+              >
+                ⚡ Load Fitness Sample (3 Accounts)
+              </button>
+              <button
+                type="button"
+                className="btn-toolbar-action"
+                onClick={() => {
+                  setAccountsData(NICHE_DATA_TEMPLATE);
+                  notifyCopy('Inserted structured template!');
+                }}
+              >
+                📋 Insert Blank Template
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn-toolbar-clear"
+              onClick={() => setAccountsData('')}
+              title="Clear data"
+            >
+              ✕ Clear
+            </button>
+          </div>
+
+          <textarea
+            id="accountsDataInput"
+            className="niche-data-textarea"
+            rows={14}
+            placeholder={`Paste data collected on N accounts here...\nFor each account include:\n- Handle (@username)\n- Follower count\n- Bio & Link-in-bio destination\n- Last 10-15 post captions / hooks\n- Post formats (Reel / Carousel / Static)\n- Rough engagement (likes + comments)\n- Posting cadence`}
+            value={accountsData}
+            onChange={(e) => setAccountsData(e.target.value)}
+          />
+        </div>
+
+        {intelError && <div className="error-toast">{intelError}</div>}
+
+        <button
+          type="button"
+          className="btn-primary btn-run-pipeline btn-run-niche-intel"
+          onClick={handleRunIntel}
+          disabled={intelLoading}
+        >
+          {intelLoading ? (
+            <>
+              <span className="spinner"></span>
+              <span>Running 7-Stage Niche Competitive Intelligence...</span>
+            </>
+          ) : (
+            <>
+              <span>🎯 Run 7-Stage Niche Intelligence & 30-Day Plan ➡️</span>
+            </>
+          )}
+        </button>
+      </section>
+
+      {/* Live Pipeline Step Progress Bar */}
+      {intelLoading && (
+        <div className="pipeline-progress-card niche-progress-card">
+          <div className="progress-header">
+            <h4>⚡ Synthesizing Cohort Intelligence ({niche || 'Niche'})</h4>
+            <span className="progress-status-pill niche-status-pill">Live Reasoning</span>
+          </div>
+          <div className="pipeline-steps">
+            <div className={`pipeline-step ${intelStageIndex >= 1 ? 'active' : ''} ${intelStageIndex > 1 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 1 ? '✓' : '1'}</div>
+              <div className="step-body">
+                <strong>Stage 1: Account Tiers & Optimization Matrix</strong>
+                <span>Grouping by size and true intent (reach vs trust vs direct sales vs community)</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 2 ? 'active' : ''} ${intelStageIndex > 2 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 2 ? '✓' : '2'}</div>
+              <div className="step-body">
+                <strong>Stage 2: Cross-Account Content Pillar Map</strong>
+                <span>Correlating recurring content pillars with engagement across all accounts</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 3 ? 'active' : ''} ${intelStageIndex > 3 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 3 ? '✓' : '3'}</div>
+              <div className="step-body">
+                <strong>Stage 3: Top 10 Hook Teardowns & Formulas</strong>
+                <span>Naming copywriting patterns (contrarian, listicle, callout, story, pattern interrupt)</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 4 ? 'active' : ''} ${intelStageIndex > 4 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 4 ? '✓' : '4'}</div>
+              <div className="step-body">
+                <strong>Stage 4: Format vs Performance Benchmark</strong>
+                <span>Reels vs Carousels vs Static: distinguishing niche trends from single outliers</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 5 ? 'active' : ''} ${intelStageIndex > 5 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 5 ? '✓' : '5'}</div>
+              <div className="step-body">
+                <strong>Stage 5: Monetization & Funnel Architecture</strong>
+                <span>Bio paths, lead magnets, offer prices, and value-to-pitch ratio teardowns</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 6 ? 'active' : ''} ${intelStageIndex > 6 ? 'completed' : ''}`}>
+              <div className="step-circle">{intelStageIndex > 6 ? '✓' : '6'}</div>
+              <div className="step-body">
+                <strong>Stage 6: Saturation vs 5 Untouched Gap Angles</strong>
+                <span>Diagnosing fatigue and crafting 5 high-intent angles nobody in this cohort covers</span>
+              </div>
+            </div>
+            <div className={`pipeline-step ${intelStageIndex >= 7 ? 'active' : ''}`}>
+              <div className="step-circle">{intelStageIndex >= 7 ? '⏳' : '7'}</div>
+              <div className="step-body">
+                <strong>Stage 7: 30-Day Content Plan Built from Gaps</strong>
+                <span>Week-by-week calendar with hooks, formats, delivery beats, and CTAs</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Results Presentation Card */}
+      {intelResult && !intelLoading && (
+        <div className="strategy-results-card niche-results-card">
+          <div className="strategy-results-header">
+            <div className="results-title-group">
+              <span className="strategy-topic-tag niche-tag">Niche Competitive Intelligence</span>
+              <h3 className="results-niche-title">{intelMeta?.niche || niche}</h3>
+              <p className="results-goal-sub">🎯 Goal: {intelMeta?.goal || goal}</p>
+              <div className="strategy-meta-tags">
+                <span className="meta-tag">📅 {intelMeta?.timestamp}</span>
+                {intelMeta?.model && <span className="meta-tag model-tag">⚡ {intelMeta.model}</span>}
+              </div>
+            </div>
+
+            <div className="results-action-buttons">
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopyFull}
+              >
+                📋 Copy Full Report
+              </button>
+              {hasHooks && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyHooks}
+                >
+                  🪝 Copy 10 Hooks
+                </button>
+              )}
+              {hasGaps && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyGaps}
+                >
+                  🎯 Copy 5 Gap Angles
+                </button>
+              )}
+              {hasPlan && (
+                <button
+                  type="button"
+                  className="btn-secondary btn-action-sm"
+                  onClick={handleCopyPlan}
+                >
+                  📅 Copy 30-Day Plan
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn-secondary btn-action-sm"
+                onClick={handleCopySummary}
+              >
+                ⚡ Copy Summary
+              </button>
+              <button
+                type="button"
+                className="btn-primary btn-action-sm"
+                onClick={() => {
+                  setIntelResult('');
+                  window.scrollTo({ top: 120, behavior: 'smooth' });
+                }}
+              >
+                🔄 New Cohort Audit
+              </button>
+            </div>
+          </div>
+
+          {/* Stage Filter Tabs */}
+          <div className="stage-filter-tabs">
+            {[
+              { id: 'all', label: '📋 All 7 Stages' },
+              { id: 'summary', label: '⚡ Executive Summary' },
+              { id: 'stage1', label: '🏢 1. Account Tiers' },
+              { id: 'stage2', label: '🗺️ 2. Pillar Map' },
+              { id: 'stage3', label: '🪝 3. Hook Teardown' },
+              { id: 'stage4', label: '📊 4. Format Benchmark' },
+              { id: 'stage5', label: '💰 5. Funnels' },
+              { id: 'stage6', label: '🎯 6. 5 Gap Angles' },
+              { id: 'stage7', label: '📅 7. 30-Day Plan' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`stage-filter-btn ${activeStageFilter === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveStageFilter(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="strategy-content-body">
+            <FormattedNicheIntelMarkdown
+              content={intelResult}
+              filterStage={activeStageFilter}
+              onCopy={notifyCopy}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Saved Cohort Audits History */}
+      {intelHistory.length > 0 && (
+        <section className="card strategy-history-card">
+          <div className="history-header">
+            <h4>💾 Saved Niche Intelligence Reports ({intelHistory.length})</h4>
+            <span className="history-subtitle">Past competitor cohort analyses saved locally in browser</span>
+          </div>
+
+          <div className="history-items-grid">
+            {intelHistory.map((item) => (
+              <div
+                key={item.id}
+                className="history-item-card niche-history-item"
+                onClick={() => handleLoadHistory(item)}
+              >
+                <div className="history-item-top">
+                  <span className="history-item-date">{item.timestamp}</span>
+                  <button
+                    type="button"
+                    className="btn-delete-history"
+                    title="Delete report"
+                    onClick={(e) => handleDeleteHistory(item.id, e)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <h5 className="history-item-niche">{item.niche}</h5>
+                <p className="history-item-goal" style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  🎯 {item.goal}
+                </p>
+                <div className="history-item-badges">
+                  <span className="badge-sm niche-badge-sm">Niche Intel</span>
+                  {item.model && <span className="badge-sm">{item.model}</span>}
+                </div>
+                <button type="button" className="btn-load-history">
+                  Load Report →
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('ad_analyzer_auth') === 'true';
@@ -3190,6 +4152,24 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
             <span className="pill-desc">Formats • Top Posts • The Good/Bad • Gaps • 5 Reel Ideas</span>
           </div>
         </button>
+
+        <button
+          type="button"
+          className={`section-nav-pill ${mainSection === 'niche-intel' ? 'active' : ''}`}
+          onClick={() => {
+            setMainSection('niche-intel');
+            localStorage.setItem('ad_analyzer_section', 'niche-intel');
+          }}
+        >
+          <span className="pill-icon">🎯</span>
+          <div className="pill-text-wrap">
+            <div className="pill-title-row">
+              <span className="pill-title">Niche Competitive Intel</span>
+              <span className="pill-badge pill-badge-purple">Cohort Intel</span>
+            </div>
+            <span className="pill-desc">Tiers • Pillars • 10 Hooks • Funnels • 30-Day Plan</span>
+          </div>
+        </button>
       </nav>
 
       {/* Main Content Layout */}
@@ -3227,6 +4207,16 @@ Cite recent (2025-2026) sources — Meta's own benchmarks, agency case studies, 
           />
         ) : mainSection === 'insta-audit' ? (
           <InstaProfileAuditSection
+            apiHealth={apiHealth}
+            customApiKey={customApiKey}
+            API_BASE={API_BASE}
+            onOpenKeyModal={() => {
+              setModalKeyInput(customApiKey);
+              setShowKeyModal(true);
+            }}
+          />
+        ) : mainSection === 'niche-intel' ? (
+          <InstaNicheIntelSection
             apiHealth={apiHealth}
             customApiKey={customApiKey}
             API_BASE={API_BASE}

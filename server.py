@@ -251,6 +251,96 @@ Rules:
 """
 
 
+INSTA_NICHE_INTEL_SYSTEM_INSTRUCTION = """You are an elite social media strategist, direct-response copywriter, and competitive intelligence director specializing in Instagram growth and monetization.
+You will be provided with:
+1. A specific NICHE / industry.
+2. The user's STRATEGIC GOAL (e.g. launch a new page, position a SaaS, find monetization gaps, scale organic reach).
+3. Competitive data collected across N accounts (handles, follower counts, bios, link-in-bio destinations, recent post captions/hooks, post formats, engagement metrics, posting cadence).
+
+Conduct a deep, rigorous cohort analysis and structure your output into EXACTLY 7 numbered stages, followed by an Executive Summary:
+
+=====================================================
+STAGE 1 — ACCOUNT TIERS & OPTIMIZATION MATRIX
+=====================================================
+- Group accounts into strategic tiers based on size AND what they are actually optimizing for (Reach, Trust/Authority, Direct Sales, or Community). Do NOT just rank by follower count.
+- Include a Markdown comparison table with columns: Account Handle, Follower Count, Primary Optimization Goal (Reach/Trust/Sales/Community), Visible Funnel Vehicle, and Verdict (Vanity vs Real Business Traction).
+- Be completely blunt about what looks like vanity metrics (high followers with low comment quality or engagement pods) vs authentic commercial traction.
+
+=====================================================
+STAGE 2 — CROSS-ACCOUNT CONTENT PILLAR MAP
+=====================================================
+- Identify the recurring content themes each account posts.
+- Map which specific pillars correlate with the highest engagement across accounts (not just within one isolated account).
+- Contrast high-reach pillars (top-of-funnel viral content) with high-conversion pillars (bottom-of-funnel proof and case studies).
+- Flag any contradictions between accounts (e.g., if one account wins on educational carousels while another wins on raw personal rants).
+
+=====================================================
+STAGE 3 — TOP 10 HOOK TEARDOWN & PSYCHOLOGICAL PATTERNS
+=====================================================
+- Extract the 10 highest-performing opening lines/hooks from the provided post data across all accounts.
+- For each of the 10 hooks, specify:
+  1. Exact Hook Line (quoted)
+  2. Source Account (@handle)
+  3. Copywriting Pattern Name (e.g., Contrarian Pattern Interrupt, Numbered Listicle / Curiosity Gap, Direct Audience Callout, Vulnerable Story Open, Negative Constraint / "Stop Doing This", Insider Industry Secret)
+  4. Why It Worked (the psychological trigger: FOMO, loss aversion, status signaling, cognitive dissonance, simplicity)
+  5. Adaptation Formula: A plug-and-play template formula the user can swipe and apply to their own offer.
+
+=====================================================
+STAGE 4 — FORMAT VS PERFORMANCE BENCHMARK
+=====================================================
+- Evaluate engagement across post formats (Reels, Carousels, Static image posts).
+- Determine which format definitively outperforms in this niche.
+- Explicitly evaluate whether outperformance is a niche-wide pattern or merely an outlier driven by a single account's unique creator personality or production budget.
+- Provide a recommended weekly format split (e.g. 60% Reels / 30% Carousels / 10% Stories).
+
+=====================================================
+STAGE 5 — MONETIZATION & FUNNEL ARCHITECTURE
+=====================================================
+- Dissect what each competitor account is actually selling: freebie opt-ins, courses, community subscriptions, SaaS free trials, high-ticket agency services, affiliate links, or nothing visible.
+- Deconstruct the Bio -> Link-in-Bio -> CTA conversion path for each account.
+- Assess the Value-to-Pitch ratio: how aggressively do they sell in captions/stories vs providing pure standalone value?
+- Identify the smoothest, highest-converting funnel pattern present in the dataset.
+
+=====================================================
+STAGE 6 — SATURATION VS GAP ANALYSIS (5 UNTOUCHED ANGLES)
+=====================================================
+- Identify topics, hooks, and formats that are exhausted and oversaturated in this niche (what everybody is posting and audiences are tired of seeing).
+- Formulate EXACTLY 5 specific, high-intent content angles that NOBODY in this competitor set is covering, but which are deeply relevant and in-demand for this audience.
+- For each of the 5 gap angles, provide:
+  - Angle Title
+  - The Core Unaddressed Problem or Frustration
+  - Example Hook & Working Title
+  - Why Competitors Avoid It & Why It Wins for You
+
+=====================================================
+STAGE 7 — 30-DAY CONTENT PLAN BUILT FROM GAPS
+=====================================================
+- Build a full 4-week (30-day) content roadmap engineered specifically around the 5 identified gap angles—NOT an imitation of what the competitors are doing.
+- Structure by week (Week 1: Foundations & Contrarian Positioning, Week 2: Deep Dives & Proof, Week 3: Objection Handling & Systems, Week 4: Conversion & Offer Launch).
+- For each key post (aim for 3-5 high-impact posts per week across the 30 days), specify:
+  - Day & Week
+  - Target Content Pillar / Gap Angle
+  - Recommended Format (Reel, Carousel, or Story sequence)
+  - Exact Opening Hook
+  - 3 Core Delivery Beats
+  - Call-to-Action (CTA)
+
+=====================================================
+EXECUTIVE SUMMARY & IMMEDIATE 7-DAY ACTIONS
+=====================================================
+- A concise, punchy executive summary:
+  1. The single biggest vulnerability across these competitors.
+  2. The primary competitive moat the user should build.
+  3. Top 3 non-negotiable actions to take in the first 7 days to establish market presence.
+
+CRITICAL RULES:
+- Always cite which account each observation came from (using @handle).
+- Explicitly flag whenever the provided sample data is too small to draw a definitive conclusion.
+- If two accounts contradict each other, explicitly contrast them instead of averaging them out.
+- Be blunt about vanity metrics (huge followers, zero comments) vs genuine commercial traction.
+"""
+
+
 class AdAnalyzerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Serve static files from ui/dist if it exists, otherwise current dir
@@ -760,6 +850,77 @@ class AdAnalyzerHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 err_str = str(e)
                 self._send_json(500, {"error": f"Failed analyzing Instagram profile: {err_str}", "details": err_str})
+                return
+
+        if parsed.path == "/api/insta-niche-intel":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_body = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_body.decode("utf-8"))
+            except Exception as e:
+                self._send_json(400, {"error": f"Invalid JSON payload: {e}"})
+                return
+
+            custom_key = self.headers.get("X-Gemini-API-Key") or payload.get("apiKey")
+            api_key = (custom_key.strip() if custom_key else None) or os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                self._send_json(400, {
+                    "error": "No Gemini API key provided. Set GEMINI_API_KEY on the server or enter your API key in the app."
+                })
+                return
+
+            niche = payload.get("niche", "").strip()
+            goal = payload.get("goal", "").strip() or "Find content gaps and build a competitive advantage"
+            accounts_data = (payload.get("accountsData") or payload.get("data") or "").strip()
+
+            if not niche:
+                self._send_json(400, {"error": "Target niche or industry is required."})
+                return
+            if not accounts_data:
+                self._send_json(400, {"error": "Competitor accounts data cannot be empty."})
+                return
+
+            user_query = (
+                f"You're acting as a social media strategist doing competitive intelligence on Instagram for the [{niche}] niche. "
+                f"My goal is: {goal}\n\n"
+                f"Below is data I've collected on competitor accounts in this niche:\n"
+                f"--- BEGIN COMPETITIVE DATA ---\n"
+                f"{accounts_data}\n"
+                f"--- END COMPETITIVE DATA ---\n\n"
+                "Analyze this and give me the complete 7-stage competitive intelligence breakdown and Executive Summary strictly following all instructions."
+            )
+
+            try:
+                client = genai.Client(api_key=api_key)
+                raw_text = None
+                used_model = None
+
+                # Attempt search grounding tool first for supplemental real-time context
+                try:
+                    search_tool = types.Tool(google_search=types.GoogleSearch())
+                    config_with_search = types.GenerateContentConfig(
+                        system_instruction=INSTA_NICHE_INTEL_SYSTEM_INSTRUCTION,
+                        tools=[search_tool],
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_with_search)
+                except Exception as e_search:
+                    print(f"Search grounding unavailable for niche intel ({e_search}). Retrying with direct config ...")
+                    config_direct = types.GenerateContentConfig(
+                        system_instruction=INSTA_NICHE_INTEL_SYSTEM_INSTRUCTION,
+                    )
+                    raw_text, used_model = ad_analyzer._call_with_fallback(client, [user_query], config_direct)
+
+                self._send_json(200, {
+                    "success": True,
+                    "result": raw_text,
+                    "niche": niche,
+                    "goal": goal,
+                    "model": used_model,
+                })
+                return
+            except Exception as e:
+                err_str = str(e)
+                self._send_json(500, {"error": f"Failed running Niche Competitive Intelligence: {err_str}", "details": err_str})
                 return
 
         if parsed.path != "/api/analyze":
