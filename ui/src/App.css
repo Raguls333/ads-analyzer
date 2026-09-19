@@ -5313,3 +5313,124 @@
   color: #fff !important;
 }
 
+/* =========================================
+   MOBILE-FIRST RESTRUCTURE OVERRIDES
+   ========================================= */
+
+@media (max-width: 768px) {
+  /* Force all generic flex containers to stack vertically on mobile */
+  .app-container, .main-layout, .pin-inputs-row, .header-actions, .nav-tabs, .form-row, .card-grid, .results-grid {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+  
+  /* Make cards stretch full width and add margins */
+  .card, .niche-card, .audit-card, .strategy-card {
+    width: 100% !important;
+    margin: 10px 0 !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Increase touch targets for mobile */
+  button, input, select {
+    min-height: 48px !important;
+    font-size: 16px !important; /* Prevents iOS zoom */
+    margin-bottom: 8px !important;
+    width: 100% !important;
+  }
+
+  /* Simplify typography and spacing */
+  h1, h2, h3 {
+    font-size: 1.5rem !important;
+    text-align: center !important;
+  }
+  
+  /* Tables to scroll horizontally or stack */
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+  }
+
+  /* Passcode screen mobile optimization */
+  .pin-inputs-row {
+    flex-direction: row !important;
+    justify-content: center !important;
+  }
+  .pin-inputs-row input {
+    width: 40px !important;
+    height: 50px !important;
+    min-height: 50px !important;
+  }
+  
+  /* Clean up navigation to be simpler */
+  .sidebar {
+    position: relative !important;
+    width: 100% !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+  }
+}
+/* =========================================
+   SIDEBAR LAYOUT OVERRIDES (DESKTOP)
+   ========================================= */
+@media (min-width: 769px) {
+  .app-container {
+    display: grid !important;
+    grid-template-columns: 280px 1fr !important;
+    grid-template-rows: auto 1fr !important;
+    grid-template-areas:
+      "header main"
+      "nav main" !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+  }
+  
+  .app-header {
+    grid-area: header !important;
+    border-bottom: none !important;
+    border-right: 1px solid var(--border-subtle) !important;
+    padding-bottom: 0 !important;
+  }
+
+  .nav-tabs {
+    grid-area: nav !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    border-right: 1px solid var(--border-subtle) !important;
+    border-bottom: none !important;
+    padding: 16px !important;
+    background-color: var(--bg-main) !important;
+    gap: 8px !important;
+    overflow-y: auto !important;
+  }
+
+  .tab-btn {
+    justify-content: flex-start !important;
+    padding: 14px 20px !important;
+    border-radius: var(--radius-md) !important;
+    border: 1px solid transparent !important;
+    text-align: left !important;
+  }
+
+  .tab-btn:hover {
+    background: var(--bg-card-hover) !important;
+  }
+
+  .tab-btn.active {
+    background: var(--bg-elevated) !important;
+    border: 1px solid var(--border-bright) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .app-main {
+    grid-area: main !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+    padding: 32px !important;
+  }
+}
